@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.27 - unreleased
+
+### Planned
+
+- Dynamic tools/list filtering by token scopes (issue #38, port from
+  @fenbays fork). A monitoring-only token sees only the monitoring
+  tools in tools/list instead of the full 256-tool surface; cuts
+  initial-handshake token cost and stops the LLM from "trying" tools
+  it cannot call.
+- Active-only problem filter (issue #39): `problem_get(monitored=True)`
+  parameter + `problem_active_get` extension tool that wraps it with
+  severity floor and human-readable timestamps. Skips problems on
+  disabled triggers / hosts so SRE chats only see real ongoing alerts.
+- OAuth 2.0 / OIDC discovery for mcp-remote and Claude Desktop remote
+  (issue #36) - exposes `/.well-known/oauth-authorization-server` so
+  remote clients can negotiate auth without a hardcoded bearer.
+
 ## v1.26 - 2026-05-02
 
 ### Added
