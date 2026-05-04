@@ -332,20 +332,16 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="settings-row">
-            <div class="settings-label">
-                Admin Portal <span class="tooltip-icon" tabindex="0" data-tooltip="Whether [admin].enabled is true in config.toml. The toggle is read-only here on purpose: disabling the admin portal from inside the admin portal would lock you out and force you to SSH in and edit config.toml to recover. To disable, edit /etc/zabbix-mcp/config.toml on the server, set [admin].enabled = false, then restart the service.">&#x1F6C8;</span>
-            </div>
+            <div class="settings-label">Admin Portal <span class="tooltip-icon" tabindex="0" data-tooltip="Whether [admin].enabled is true in config.toml. The toggle is read-only here on purpose: disabling the admin portal from inside the admin portal would lock you out and force you to SSH in and edit config.toml to recover. To disable, edit /etc/zabbix-mcp/config.toml on the server, set [admin].enabled = false, then restart the service.">&#x1F6C8;</span></div>
             <div>
-                <label class="toggle-label" style="opacity: 0.85; cursor: not-allowed;">
+                <label class="toggle-label">
                     <span class="toggle">
                         <input type="checkbox" checked disabled>
                         <span class="toggle-slider"></span>
                     </span>
-                    Enabled (config-only)
+                    Admin portal is enabled (read-only here for safety)
                 </label>
-                <div class="form-hint">
-                    The portal is on - that's how you got here. Toggling it off from this UI is intentionally blocked because it would lock you out. To disable: SSH to the server, set <code>[admin].enabled = false</code> in <code>/etc/zabbix-mcp/config.toml</code>, then <code>sudo systemctl restart zabbix-mcp-server</code>.
-                </div>
+                <div class="form-hint">For safety, disabling the admin portal can only be done in <code>config.toml</code> directly - if you could turn it off from inside the portal, you would lock yourself out and have to SSH in to recover. To disable: edit <code>/etc/zabbix-mcp/config.toml</code> on the server, set <code>[admin].enabled = false</code>, then <code>sudo systemctl restart zabbix-mcp-server</code>.</div>
             </div>
         </div>
         <div class="settings-row">
