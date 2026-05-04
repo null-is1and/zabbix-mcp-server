@@ -661,6 +661,8 @@
       <strong>&#x26A0;&#xFE0F; No <code>[server].public_url</code> set</strong>, so the snippets below assume the URL operator typed in step 4. Set <code>public_url</code> in <a href="/settings#mcp-server" style="color: inherit; text-decoration: underline;">Settings</a> to lock it in.
     {% else %}
       <strong>&#x1F4DD; Pick the proxy you run.</strong> The snippet listens on <code>:443</code> for the host in your <code>public_url</code>, terminates TLS, and forwards everything to the MCP backend on <code>{{ url_ctx.url }}</code>. OAuth + MCP + admin assets all share the same backend so a single <code>ProxyPass /</code> / <code>location /</code> covers them.
+      <br><br>
+      <strong>&#x1F4A1; No proxy?</strong> Run <code>sudo ./deploy/install.sh request-tls --hostname mcp.example.com</code> on the MCP host to get a Let's Encrypt cert and have the MCP server terminate TLS itself - one command, auto-renewing. See <a href="https://github.com/initMAX/zabbix-mcp-server/blob/main/docs/OAUTH.md#tls" target="_blank" style="color: inherit; text-decoration: underline;">docs/OAUTH.md - TLS</a> for details.
     {% endif %}
   </div>
 

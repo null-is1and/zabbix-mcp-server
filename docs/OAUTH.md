@@ -62,10 +62,23 @@ For production you have two equally good options:
 > The command runs `certbot certonly`, picks `--standalone` if port 80 is
 > free or `--webroot` otherwise, symlinks the cert into
 > `/etc/zabbix-mcp/tls/`, writes `tls_cert_file` + `tls_key_file` into
-> `config.toml`, installs a deploy hook at
-> `/etc/letsencrypt/renewal-hooks/deploy/zabbix-mcp-server.sh` that
-> reloads the service after each renewal, and enables the certbot
-> renewal timer. Re-run any time you add or rotate a hostname.
+> `config.toml`, sets minimum-privilege permissions on the cert files
+> (privkey `0440 root:zabbix-mcp`, `live/` + `archive/` directories
+> `0710 root:zabbix-mcp` so the service user can read its own privkey
+> by full path but cannot enumerate other certs on the box), installs
+> a deploy hook at `/etc/letsencrypt/renewal-hooks/deploy/zabbix-mcp-server.sh`
+> that re-applies those permissions and reloads the service after each
+> renewal, and enables the certbot renewal timer. Re-run any time you
+> add or rotate a hostname.
+>
+> **Pre-flight check:** if your box already runs Apache / nginx / Caddy
+> on `:80` with a reverse proxy forwarding to `127.0.0.1:8080`,
+> `request-tls` will work (auto-detects webroot mode), but enabling
+> the resulting `tls_cert_file` in `[server]` makes the MCP server
+> terminate TLS itself - which breaks the existing HTTP-forwarding
+> proxy. Pick one termination point: either keep the proxy and have
+> it own the cert (option 2 below), or shut the proxy off / re-point
+> it to `https://127.0.0.1:8080` and let MCP own TLS (option 1 below).
 >
 > If you already terminate TLS in a reverse proxy (option 2), let
 > Caddy/nginx-proxy/cert-manager/Cloudflare handle the cert there - the
