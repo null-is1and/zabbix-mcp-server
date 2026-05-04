@@ -1719,7 +1719,11 @@ def _register_tools(
     # ------------------------------------------------------------------
     # Extension tools (server-side analytics, graph export, reporting)
     # ------------------------------------------------------------------
-    from zabbix_mcp.api.extensions import graph_render, anomaly_detect, capacity_forecast, item_threshold_search, problem_active_get
+    from zabbix_mcp.api.extensions import (
+        graph_render, anomaly_detect, capacity_forecast, item_threshold_search,
+        problem_active_get, host_status_get, hostgroup_overview_get,
+        infrastructure_summary_get, item_history_summary_get,
+    )
 
     async def _graph_render(
         *,
@@ -1919,6 +1923,119 @@ def _register_tools(
             _problem_active_get, name="problem_active_get",
             annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         )
+        count += 1
+
+    # Pre-correlated view tools (single-call replacements for the
+    # multi-step host.get/item.get/problem.get/history.get chain LLMs
+    # struggle with, esp. local LLMs).
+    async def _host_status_get(
+        *,
+        host_id: Annotated[Optional[str], Field(description="Zabbix host ID. Either host_id or host (the name) must be provided.")] = None,
+        host: Annotated[Optional[str], Field(description="Zabbix host name. Tried as exact match first, falls back to substring search.")] = None,
+        server: Annotated[Optional[str], Field(description=server_desc)] = None,
+        raw_json: Annotated[bool, Field(description=_RAW_JSON_PARAM_DESC)] = False,
+    ) -> str:
+        """Single-call host status: identity + interfaces + monitored-state + active problems (severity Warning+, with disabled-trigger/host filtered out) + last 8 item values, in one self-contained JSON payload.
+
+        Use this whenever an operator asks 'what is the status of <hostname>?' or 'what is wrong on <hostname>?'. Replaces the typical 3-4 tool chain (host_get + hostinterface_get + problem_get + item_get) so a one-shot LLM prompt can answer without follow-up tool calls."""
+        _raw_err = _check_raw_json_allowed(bool(raw_json))
+        if _raw_err:
+            raise ToolError(_raw_err)
+        srv = client_manager.resolve_server(server or client_manager.default_server)
+        _auth_err = check_token_authorization(srv, tool_prefix="host")
+        if _auth_err:
+            raise ToolError(_auth_err)
+        return _raise_if_extension_error(await asyncio.to_thread(
+            host_status_get, client_manager, srv,
+            host_id=host_id, host=host,
+        ), raw_json=bool(raw_json))
+
+    if _ext_allowed("host_status_get"):
+        mcp.add_tool(_host_status_get, name="host_status_get",
+                     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+        count += 1
+
+    async def _hostgroup_overview_get(
+        *,
+        groupid: Annotated[Optional[str], Field(description="Host group ID. Either groupid or group (the name) must be supplied.")] = None,
+        group: Annotated[Optional[str], Field(description="Host group name (exact match).")] = None,
+        top_n: Annotated[Optional[int], Field(description="Number of most-problematic hosts to return (default 5).")] = 5,
+        server: Annotated[Optional[str], Field(description=server_desc)] = None,
+        raw_json: Annotated[bool, Field(description=_RAW_JSON_PARAM_DESC)] = False,
+    ) -> str:
+        """Host group health roll-up: member-host counts (total / enabled / with-problems) + active-problem severity breakdown + top-N most-problematic hosts inside the group, in one call.
+
+        Use this for 'how is the <hostgroup> doing?' / 'give me a daily health report for <group>' style prompts. Replaces hostgroup_get + host_get(groupids=) + problem_get(hostids=) chain."""
+        _raw_err = _check_raw_json_allowed(bool(raw_json))
+        if _raw_err:
+            raise ToolError(_raw_err)
+        srv = client_manager.resolve_server(server or client_manager.default_server)
+        _auth_err = check_token_authorization(srv, tool_prefix="hostgroup")
+        if _auth_err:
+            raise ToolError(_auth_err)
+        return _raise_if_extension_error(await asyncio.to_thread(
+            hostgroup_overview_get, client_manager, srv,
+            groupid=groupid, group=group, top_n=top_n,
+        ), raw_json=bool(raw_json))
+
+    if _ext_allowed("hostgroup_overview_get"):
+        mcp.add_tool(_hostgroup_overview_get, name="hostgroup_overview_get",
+                     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+        count += 1
+
+    async def _infrastructure_summary_get(
+        *,
+        top_n: Annotated[Optional[int], Field(description="Number of top-problematic hosts to include (default 5).")] = 5,
+        server: Annotated[Optional[str], Field(description=server_desc)] = None,
+        raw_json: Annotated[bool, Field(description=_RAW_JSON_PARAM_DESC)] = False,
+    ) -> str:
+        """Whole-Zabbix dashboard summary: host / item / trigger / template counts + active-problem severity breakdown + top-N most-problematic hosts, in a single call.
+
+        Use this for 'show me the overall status' / 'is everything OK?' / 'how many problems do we have right now?' style first-look prompts. Replaces five separate count + filter calls and the LLM correlation step that local models often get wrong."""
+        _raw_err = _check_raw_json_allowed(bool(raw_json))
+        if _raw_err:
+            raise ToolError(_raw_err)
+        srv = client_manager.resolve_server(server or client_manager.default_server)
+        _auth_err = check_token_authorization(srv, tool_prefix="host")
+        if _auth_err:
+            raise ToolError(_auth_err)
+        return _raise_if_extension_error(await asyncio.to_thread(
+            infrastructure_summary_get, client_manager, srv, top_n=top_n,
+        ), raw_json=bool(raw_json))
+
+    if _ext_allowed("infrastructure_summary_get"):
+        mcp.add_tool(_infrastructure_summary_get, name="infrastructure_summary_get",
+                     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
+        count += 1
+
+    async def _item_history_summary_get(
+        *,
+        itemid: Annotated[Optional[str], Field(description="Item ID. Either itemid or (host + key) must be supplied.")] = None,
+        host: Annotated[Optional[str], Field(description="Host name (used together with key).")] = None,
+        key: Annotated[Optional[str], Field(description="Item key (used together with host).")] = None,
+        period: Annotated[Optional[str], Field(description="Time window: '1h', '6h', '1d', '7d', '30d' (default '1h').")] = "1h",
+        limit: Annotated[Optional[int], Field(description="Max history points to include (default 100).")] = 100,
+        server: Annotated[Optional[str], Field(description=server_desc)] = None,
+        raw_json: Annotated[bool, Field(description=_RAW_JSON_PARAM_DESC)] = False,
+    ) -> str:
+        """Item metadata + last-N data points + min/max/avg statistics, in one call.
+
+        Use this for 'what was the average load on <host> over the last hour?' / 'show me memory usage trend on <host>'. Replaces the item_get + history_get + manual statistics loop the LLM has to write to answer trend questions."""
+        _raw_err = _check_raw_json_allowed(bool(raw_json))
+        if _raw_err:
+            raise ToolError(_raw_err)
+        srv = client_manager.resolve_server(server or client_manager.default_server)
+        _auth_err = check_token_authorization(srv, tool_prefix="item")
+        if _auth_err:
+            raise ToolError(_auth_err)
+        return _raise_if_extension_error(await asyncio.to_thread(
+            item_history_summary_get, client_manager, srv,
+            itemid=itemid, host=host, key=key, period=period, limit=limit,
+        ), raw_json=bool(raw_json))
+
+    if _ext_allowed("item_history_summary_get"):
+        mcp.add_tool(_item_history_summary_get, name="item_history_summary_get",
+                     annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True))
         count += 1
 
     # ------------------------------------------------------------------

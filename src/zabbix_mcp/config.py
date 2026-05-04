@@ -226,6 +226,9 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "graph", "graphitem", "graphprototype",
         "discoveryrule", "discoveryruleprototype",
         "dcheck", "dhost", "drule", "dservice", "httptest", "sla",
+        # Pre-correlated views (one-shot replacements for raw chains)
+        "host_status_get", "hostgroup_overview_get",
+        "infrastructure_summary_get", "item_history_summary_get",
     ],
     "data_collection": [
         "template", "templategroup", "templatedashboard",
@@ -248,6 +251,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "extensions": [
         "graph_render", "anomaly_detect", "capacity_forecast",
         "item_threshold_search", "problem_active_get",
+        "host_status_get", "hostgroup_overview_get",
+        "infrastructure_summary_get", "item_history_summary_get",
         "report_generate", "action_prepare", "action_confirm",
         "zabbix_raw_api_call", "health_check",
     ],

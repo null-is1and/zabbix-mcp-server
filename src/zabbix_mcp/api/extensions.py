@@ -936,3 +936,446 @@ def problem_active_get(
     except Exception as exc:
         logger.exception("Unexpected error in problem_active_get")
         return _error_json(f"Unexpected error: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# 6. Pre-correlated views for chat-style operator questions
+# ---------------------------------------------------------------------------
+#
+# Local-LLM users (Ollama / Open WebUI / Goose with a local model) reported
+# in the v1.29 review thread that exposing raw `host.get` / `item.get` /
+# `problem.get` and asking the model to chain them by ID often loses
+# correlation - the model forgets which trigger belongs to which host
+# halfway through a multi-step prompt.  These tools pre-correlate the
+# common "what is wrong with X?" / "show me Y status" queries server-side
+# and return a single self-contained JSON payload, so a one-shot LLM
+# prompt can answer the question without follow-up tool calls.
+
+
+def host_status_get(
+    client_manager: ClientManager,
+    server_name: str,
+    **kwargs: Any,
+) -> str:
+    """Return one host's full operational status: identity, interfaces,
+    enabled-state, currently-firing problems, and last history values for
+    the most-watched item.
+
+    Replaces the typical 3-4 raw tool chain (host.get -> hostinterface.get
+    -> trigger.get -> problem.get -> history.get) operators have to write
+    when an LLM asks "what is the status of <hostname>?".
+
+    Args:
+        host_id (str, optional): Zabbix host ID to look up.
+        host (str, optional): Zabbix host name (preferred when the LLM
+            quotes a name from chat); resolved to host_id via host.get
+            with `filter={"host": ...}` first, falls back to
+            `search={"host": ...}` if no exact match.
+
+        Either host_id or host MUST be supplied.
+
+    Returns:
+        JSON ``{"host": {...}, "interfaces": [...], "active_problems":
+        [...], "active_problem_count_by_severity": {...},
+        "last_values": [...]}``.  On error: ``{"error": "..."}``.
+    """
+    try:
+        host_id = kwargs.get("host_id")
+        host_name = kwargs.get("host")
+        if not host_id and not host_name:
+            return _error_json("host_status_get requires either host_id or host (the host name).")
+
+        # Resolve host to a single record.
+        if host_id:
+            hosts = client_manager.call(server_name, "host.get", {
+                "output": ["hostid", "host", "name", "status", "available", "description"],
+                "hostids": [str(host_id)],
+                "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main", "useip"],
+                "selectInventory": ["os", "hardware", "location"],
+            })
+        else:
+            hosts = client_manager.call(server_name, "host.get", {
+                "output": ["hostid", "host", "name", "status", "available", "description"],
+                "filter": {"host": host_name},
+                "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main", "useip"],
+                "selectInventory": ["os", "hardware", "location"],
+            })
+            if not hosts:
+                hosts = client_manager.call(server_name, "host.get", {
+                    "output": ["hostid", "host", "name", "status", "available", "description"],
+                    "search": {"host": host_name},
+                    "selectInterfaces": ["interfaceid", "ip", "dns", "port", "type", "main", "useip"],
+                    "selectInventory": ["os", "hardware", "location"],
+                })
+        if not hosts:
+            return _error_json(f"No host matched the query (host_id={host_id!r}, host={host_name!r}).")
+        host = hosts[0]
+
+        # Active problems on this host (severity Warning+, monitored only).
+        problems_raw = client_manager.call(server_name, "problem.get", {
+            "output": "extend",
+            "hostids": [host["hostid"]],
+            "severities": [2, 3, 4, 5],
+            "sortfield": "eventid",
+            "sortorder": "DESC",
+            "limit": 50,
+        })
+        kept_problems, host_map = _filter_active_problems(problems_raw, client_manager, server_name)
+        active_problems: list[dict[str, Any]] = []
+        sev_count = {"warning": 0, "average": 0, "high": 0, "disaster": 0}
+        for p in kept_problems[:25]:
+            sev = str(p.get("severity", "0"))
+            label = _SEVERITY_LABELS.get(sev, sev)
+            if label in sev_count:
+                sev_count[label] += 1
+            active_problems.append({
+                "eventid": p.get("eventid", ""),
+                "triggerid": str(p.get("objectid", "")),
+                "name": p.get("name", ""),
+                "severity": sev,
+                "severity_label": label,
+                "time": _ts_to_human(p.get("clock")),
+                "acknowledged": int(p.get("acknowledged", 0) or 0),
+            })
+
+        # Last 5 most-recently-changed items on the host (whatever the
+        # operator probably wants to see at a glance: load, mem, disk).
+        items = client_manager.call(server_name, "item.get", {
+            "output": ["itemid", "name", "key_", "lastvalue", "lastclock", "units", "value_type"],
+            "hostids": [host["hostid"]],
+            "filter": {"status": 0},  # enabled
+            "sortfield": "lastclock",
+            "sortorder": "DESC",
+            "limit": 8,
+        })
+        last_values = []
+        for it in items:
+            last_values.append({
+                "itemid": it.get("itemid", ""),
+                "name": it.get("name", ""),
+                "key": it.get("key_", ""),
+                "lastvalue": it.get("lastvalue", ""),
+                "units": it.get("units", ""),
+                "lastclock_human": _ts_to_human(it.get("lastclock")),
+            })
+
+        return json.dumps({
+            "host": {
+                "hostid": host["hostid"],
+                "host": host.get("host", ""),
+                "name": host.get("name", ""),
+                "status": "enabled" if str(host.get("status", "1")) == "0" else "disabled",
+                "available": host.get("available", ""),
+                "description": host.get("description", ""),
+                "inventory": host.get("inventory") if isinstance(host.get("inventory"), dict) else {},
+            },
+            "interfaces": [
+                {
+                    "ip": i.get("ip", ""), "dns": i.get("dns", ""),
+                    "port": i.get("port", ""), "type": i.get("type", ""),
+                    "main": int(i.get("main", 0) or 0),
+                    "useip": int(i.get("useip", 0) or 0),
+                }
+                for i in (host.get("interfaces") or [])
+            ],
+            "active_problem_count_by_severity": sev_count,
+            "active_problems": active_problems,
+            "last_values": last_values,
+        }, ensure_ascii=False)
+    except Exception as exc:
+        logger.exception("Unexpected error in host_status_get")
+        return _error_json(f"Unexpected error: {exc}")
+
+
+def hostgroup_overview_get(
+    client_manager: ClientManager,
+    server_name: str,
+    **kwargs: Any,
+) -> str:
+    """Return a host group's health: member host count, count of hosts
+    with problems, problem count broken down by severity, and the top-N
+    most-problematic hosts within the group.
+
+    Replaces the typical "hostgroup.get + host.get(groupids=) +
+    problem.get(hostids=)" chain operators have to script for a daily
+    health report.
+
+    Args:
+        groupid (str, optional): Zabbix host-group ID.
+        group (str, optional): Host-group name; resolved to groupid via
+            ``hostgroup.get(filter)``.
+
+        Either groupid or group MUST be supplied.
+
+        top_n (int, optional): Number of most-problematic hosts to list
+            (default 5).
+    """
+    try:
+        groupid = kwargs.get("groupid")
+        group = kwargs.get("group")
+        top_n = int(kwargs.get("top_n", 5))
+
+        if not groupid and not group:
+            return _error_json("hostgroup_overview_get requires either groupid or group.")
+
+        if groupid:
+            groups = client_manager.call(server_name, "hostgroup.get", {
+                "output": ["groupid", "name"],
+                "groupids": [str(groupid)],
+            })
+        else:
+            groups = client_manager.call(server_name, "hostgroup.get", {
+                "output": ["groupid", "name"],
+                "filter": {"name": group},
+            })
+        if not groups:
+            return _error_json(f"No host group matched (groupid={groupid!r}, group={group!r}).")
+        g = groups[0]
+
+        hosts = client_manager.call(server_name, "host.get", {
+            "output": ["hostid", "host", "name", "status"],
+            "groupids": [g["groupid"]],
+        })
+        host_count = len(hosts)
+        enabled = sum(1 for h in hosts if str(h.get("status", "1")) == "0")
+        host_index = {h["hostid"]: h for h in hosts}
+
+        problems_raw = client_manager.call(server_name, "problem.get", {
+            "output": "extend",
+            "hostids": list(host_index.keys()),
+            "severities": [2, 3, 4, 5],
+            "limit": 1000,
+        })
+        kept_problems, host_map = _filter_active_problems(problems_raw, client_manager, server_name)
+
+        sev_count = {"warning": 0, "average": 0, "high": 0, "disaster": 0}
+        per_host: dict[str, int] = {}
+        for p in kept_problems:
+            sev = str(p.get("severity", "0"))
+            label = _SEVERITY_LABELS.get(sev, sev)
+            if label in sev_count:
+                sev_count[label] += 1
+            tid = str(p.get("objectid", ""))
+            hid = host_map.get(tid, {}).get("hostid", "")
+            if hid:
+                per_host[hid] = per_host.get(hid, 0) + 1
+
+        top_hosts = sorted(per_host.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+        top_hosts_pretty = [
+            {
+                "hostid": hid,
+                "host": (host_index.get(hid) or {}).get("host", ""),
+                "name": (host_index.get(hid) or {}).get("name", ""),
+                "active_problem_count": cnt,
+            }
+            for hid, cnt in top_hosts
+        ]
+
+        return json.dumps({
+            "group": {"groupid": g["groupid"], "name": g["name"]},
+            "host_count": host_count,
+            "enabled_host_count": enabled,
+            "hosts_with_problems_count": len(per_host),
+            "active_problem_count_by_severity": sev_count,
+            "active_problem_count": sum(sev_count.values()),
+            "top_hosts_by_problem_count": top_hosts_pretty,
+        }, ensure_ascii=False)
+    except Exception as exc:
+        logger.exception("Unexpected error in hostgroup_overview_get")
+        return _error_json(f"Unexpected error: {exc}")
+
+
+def infrastructure_summary_get(
+    client_manager: ClientManager,
+    server_name: str,
+    **kwargs: Any,
+) -> str:
+    """One-shot dashboard summary: host / item / trigger counts plus
+    active-problem severity breakdown plus the top-N hosts by active
+    problem count, across the entire Zabbix server.
+
+    Designed for "show me the overall status" prompts that would
+    otherwise require five separate tool calls and an LLM correlation
+    step that local models often get wrong.
+    """
+    try:
+        top_n = int(kwargs.get("top_n", 5))
+        # Counts via output="count" - one cheap query each.
+        def _count(method: str) -> int:
+            try:
+                v = client_manager.call(server_name, method, {"output": "count"})
+                return int(v) if isinstance(v, (int, str)) else 0
+            except Exception:
+                return 0
+
+        host_count = _count("host.get")
+        host_enabled = _count("host.get") and len(
+            client_manager.call(server_name, "host.get", {"output": ["hostid"], "filter": {"status": 0}})
+        ) or 0
+        item_count = _count("item.get")
+        trigger_count = _count("trigger.get")
+        template_count = _count("template.get")
+
+        # Active problems broken down by severity.
+        problems_raw = client_manager.call(server_name, "problem.get", {
+            "output": "extend",
+            "severities": [0, 1, 2, 3, 4, 5],
+            "limit": 5000,
+        })
+        kept, host_map = _filter_active_problems(problems_raw, client_manager, server_name)
+        sev_count = {"not_classified": 0, "information": 0, "warning": 0, "average": 0, "high": 0, "disaster": 0}
+        per_host: dict[str, int] = {}
+        for p in kept:
+            sev = str(p.get("severity", "0"))
+            label = _SEVERITY_LABELS.get(sev, sev).replace(" ", "_")
+            if label in sev_count:
+                sev_count[label] += 1
+            tid = str(p.get("objectid", ""))
+            hid = host_map.get(tid, {}).get("hostid", "")
+            if hid:
+                per_host[hid] = per_host.get(hid, 0) + 1
+
+        top_hosts_pretty: list[dict[str, Any]] = []
+        if per_host:
+            top = sorted(per_host.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+            ids = [h for h, _ in top]
+            host_rows = client_manager.call(server_name, "host.get", {
+                "output": ["hostid", "host", "name"],
+                "hostids": ids,
+            })
+            host_lookup = {h["hostid"]: h for h in host_rows}
+            top_hosts_pretty = [
+                {
+                    "hostid": hid,
+                    "host": (host_lookup.get(hid) or {}).get("host", ""),
+                    "name": (host_lookup.get(hid) or {}).get("name", ""),
+                    "active_problem_count": cnt,
+                }
+                for hid, cnt in top
+            ]
+
+        return json.dumps({
+            "host_count": host_count,
+            "enabled_host_count": host_enabled,
+            "item_count": item_count,
+            "trigger_count": trigger_count,
+            "template_count": template_count,
+            "active_problem_count_by_severity": sev_count,
+            "active_problem_count": sum(sev_count.values()),
+            "top_hosts_by_problem_count": top_hosts_pretty,
+        }, ensure_ascii=False)
+    except Exception as exc:
+        logger.exception("Unexpected error in infrastructure_summary_get")
+        return _error_json(f"Unexpected error: {exc}")
+
+
+def item_history_summary_get(
+    client_manager: ClientManager,
+    server_name: str,
+    **kwargs: Any,
+) -> str:
+    """Item metadata + last N data points + min/max/avg, in one call.
+
+    Replaces the "item.get + history.get + manual statistics" loop the
+    LLM has to write to answer "what was the average load on host X
+    over the last hour?".
+
+    Args:
+        itemid (str, optional): Zabbix item ID to look up.
+        host (str, optional): Host name (used together with key).
+        key (str, optional): Item key (used together with host).
+
+        Either itemid or (host + key) MUST be supplied.
+
+        period (str, optional): Time window, format ``Nh / Nd / Nm``
+            (default ``"1h"``).
+        limit (int, optional): Max history points to include (default
+            100).
+    """
+    try:
+        period = kwargs.get("period", "1h")
+        limit = int(kwargs.get("limit", 100))
+        seconds = _parse_period(period)
+        time_from = int(time.time()) - seconds
+
+        itemid = kwargs.get("itemid")
+        host = kwargs.get("host")
+        key = kwargs.get("key")
+        if not itemid and not (host and key):
+            return _error_json("item_history_summary_get requires itemid OR (host + key).")
+
+        if itemid:
+            items = client_manager.call(server_name, "item.get", {
+                "output": ["itemid", "name", "key_", "lastvalue", "units", "value_type", "hostid"],
+                "itemids": [str(itemid)],
+            })
+        else:
+            host_rows = client_manager.call(server_name, "host.get", {
+                "output": ["hostid"],
+                "filter": {"host": host},
+            })
+            if not host_rows:
+                return _error_json(f"No host matched host={host!r}.")
+            items = client_manager.call(server_name, "item.get", {
+                "output": ["itemid", "name", "key_", "lastvalue", "units", "value_type", "hostid"],
+                "hostids": [host_rows[0]["hostid"]],
+                "filter": {"key_": key},
+            })
+        if not items:
+            return _error_json("No item matched the query.")
+        it = items[0]
+        value_type = int(it.get("value_type", 0))
+        # Only numeric value_types support history aggregation.
+        if value_type not in (0, 3):
+            history = []
+            stats = None
+        else:
+            history = client_manager.call(server_name, "history.get", {
+                "output": "extend",
+                "history": value_type,
+                "itemids": [it["itemid"]],
+                "time_from": time_from,
+                "sortfield": "clock",
+                "sortorder": "DESC",
+                "limit": limit,
+            })
+            values: list[float] = []
+            for h in history:
+                try:
+                    values.append(float(h.get("value", 0)))
+                except (TypeError, ValueError):
+                    pass
+            if values:
+                stats = {
+                    "samples": len(values),
+                    "min": min(values),
+                    "max": max(values),
+                    "avg": sum(values) / len(values),
+                    "first_value": values[-1],
+                    "last_value": values[0],
+                }
+            else:
+                stats = None
+
+        return json.dumps({
+            "item": {
+                "itemid": it.get("itemid", ""),
+                "hostid": it.get("hostid", ""),
+                "name": it.get("name", ""),
+                "key": it.get("key_", ""),
+                "units": it.get("units", ""),
+                "lastvalue": it.get("lastvalue", ""),
+                "value_type": value_type,
+            },
+            "period": period,
+            "stats": stats,
+            "history": [
+                {"clock": h.get("clock", ""), "value": h.get("value", "")}
+                for h in (history or [])
+            ],
+        }, ensure_ascii=False)
+    except ValueError as exc:
+        return _error_json(str(exc))
+    except Exception as exc:
+        logger.exception("Unexpected error in item_history_summary_get")
+        return _error_json(f"Unexpected error: {exc}")
