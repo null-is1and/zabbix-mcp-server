@@ -1038,14 +1038,18 @@ def host_status_get(
                 "acknowledged": int(p.get("acknowledged", 0) or 0),
             })
 
-        # Last 5 most-recently-changed items on the host (whatever the
-        # operator probably wants to see at a glance: load, mem, disk).
+        # 8 monitored items on the host. Zabbix item.get sortfield
+        # only accepts a small allowlist (itemid / name / key_ / delay /
+        # history / trends / type / status) - "lastclock" is rejected
+        # with "Sorting by field 'lastclock' not allowed". Sort by
+        # name so the LLM gets a stable order; the response still
+        # carries lastclock so the model can read recency itself.
         items = client_manager.call(server_name, "item.get", {
             "output": ["itemid", "name", "key_", "lastvalue", "lastclock", "units", "value_type"],
             "hostids": [host["hostid"]],
             "filter": {"status": 0},  # enabled
-            "sortfield": "lastclock",
-            "sortorder": "DESC",
+            "sortfield": "name",
+            "sortorder": "ASC",
             "limit": 8,
         })
         last_values = []

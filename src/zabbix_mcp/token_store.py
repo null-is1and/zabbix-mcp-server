@@ -42,8 +42,22 @@ current_token_info: contextvars.ContextVar[Any] = contextvars.ContextVar("curren
 current_client_ip: contextvars.ContextVar[str | None] = contextvars.ContextVar("current_client_ip", default=None)
 
 
-def check_token_authorization(server_name: str, *, tool_prefix: str = "", is_write: bool = False) -> str | None:
+def check_token_authorization(
+    server_name: str,
+    *,
+    tool_prefix: str = "",
+    tool_prefixes: list[str] | tuple[str, ...] | None = None,
+    is_write: bool = False,
+) -> str | None:
     """Check current token's authorization for a server + tool + write operation.
+
+    *tool_prefix* is the single-prefix form (legacy); *tool_prefixes* is a
+    list of prefixes that must ALL be authorized - used by composite
+    "view" tools (host_status_get etc.) that internally fan out to
+    several Zabbix endpoints (host.get + problem.get + item.get + ...).
+    Without the multi-prefix check a token scoped to only "host" could
+    pull problems and items via the composite tool that it could not
+    pull via problem_get / item_get directly.
 
     Returns an error message string if denied, or None if allowed.
     """
@@ -61,11 +75,20 @@ def check_token_authorization(server_name: str, *, tool_prefix: str = "", is_wri
         return f"Token '{token.name}' is read-only. Write operations are not allowed."
 
     # Check scopes (if not wildcard)
-    if token.scopes and "*" not in token.scopes and tool_prefix:
+    if token.scopes and "*" not in token.scopes:
         from zabbix_mcp.config import TOOL_GROUPS, _expand_tool_groups
-        # Expand scopes: groups → individual prefixes
         allowed_prefixes = set(_expand_tool_groups(token.scopes))
-        if tool_prefix not in allowed_prefixes:
+
+        # Multi-prefix form: every prefix the tool touches must be allowed.
+        if tool_prefixes:
+            missing = [p for p in tool_prefixes if p not in allowed_prefixes]
+            if missing:
+                return (
+                    f"Token '{token.name}' scope does not include {missing!r} "
+                    f"(this tool combines data from {sorted(set(tool_prefixes))!r}). "
+                    f"Allowed scopes: {', '.join(token.scopes)}"
+                )
+        elif tool_prefix and tool_prefix not in allowed_prefixes:
             return f"Token '{token.name}' scope does not include '{tool_prefix}'. Allowed scopes: {', '.join(token.scopes)}"
 
     return None

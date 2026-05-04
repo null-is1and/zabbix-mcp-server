@@ -211,7 +211,17 @@ def build_args(tool_name: str, suite: Suite):
     n = tool_name
 
     # ===== Reads =====
-    if n.endswith("_get"):
+    # Pre-correlated view tools (host_status_get, hostgroup_overview_get,
+    # infrastructure_summary_get, item_history_summary_get, problem_active_get)
+    # do NOT accept the generic limit/output kwargs - their schema is
+    # purpose-built. Match them first, fall through to per-tool handlers
+    # below (must come before the catch-all _get branch).
+    _CUSTOM_GETS = {
+        "host_status_get", "hostgroup_overview_get", "infrastructure_summary_get",
+        "item_history_summary_get", "problem_active_get",
+        "graph_render", "anomaly_detect", "capacity_forecast", "item_threshold_search",
+    }
+    if n.endswith("_get") and n not in _CUSTOM_GETS:
         # Default: small limit, common output filter to keep responses tiny.
         # ``output`` must be a string ("extend" or comma-separated field list)
         # per the FastMCP schema; passing a list trips Pydantic validation.

@@ -1942,7 +1942,12 @@ def _register_tools(
         if _raw_err:
             raise ToolError(_raw_err)
         srv = client_manager.resolve_server(server or client_manager.default_server)
-        _auth_err = check_token_authorization(srv, tool_prefix="host")
+        # Composite read - require scope for every Zabbix endpoint we
+        # internally call so a narrow-scoped token can't read problems
+        # / items here that it could not pull via problem_get / item_get.
+        _auth_err = check_token_authorization(srv, tool_prefixes=[
+            "host", "hostinterface", "problem", "trigger", "item",
+        ])
         if _auth_err:
             raise ToolError(_auth_err)
         return _raise_if_extension_error(await asyncio.to_thread(
@@ -1970,7 +1975,10 @@ def _register_tools(
         if _raw_err:
             raise ToolError(_raw_err)
         srv = client_manager.resolve_server(server or client_manager.default_server)
-        _auth_err = check_token_authorization(srv, tool_prefix="hostgroup")
+        # Composite read - covers hostgroup + member host + active problems.
+        _auth_err = check_token_authorization(srv, tool_prefixes=[
+            "hostgroup", "host", "problem", "trigger",
+        ])
         if _auth_err:
             raise ToolError(_auth_err)
         return _raise_if_extension_error(await asyncio.to_thread(
@@ -1996,7 +2004,12 @@ def _register_tools(
         if _raw_err:
             raise ToolError(_raw_err)
         srv = client_manager.resolve_server(server or client_manager.default_server)
-        _auth_err = check_token_authorization(srv, tool_prefix="host")
+        # Composite read - aggregates host / item / trigger / template /
+        # problem counts plus per-group breakdown. Requires scope for
+        # every endpoint we sum over.
+        _auth_err = check_token_authorization(srv, tool_prefixes=[
+            "host", "hostgroup", "item", "trigger", "template", "problem",
+        ])
         if _auth_err:
             raise ToolError(_auth_err)
         return _raise_if_extension_error(await asyncio.to_thread(
@@ -2025,7 +2038,10 @@ def _register_tools(
         if _raw_err:
             raise ToolError(_raw_err)
         srv = client_manager.resolve_server(server or client_manager.default_server)
-        _auth_err = check_token_authorization(srv, tool_prefix="item")
+        # Composite read - item metadata + history + parent host name.
+        _auth_err = check_token_authorization(srv, tool_prefixes=[
+            "item", "history", "host",
+        ])
         if _auth_err:
             raise ToolError(_auth_err)
         return _raise_if_extension_error(await asyncio.to_thread(

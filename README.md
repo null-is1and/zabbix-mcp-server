@@ -553,20 +553,22 @@ auth_token = "XXXXXXXXXXXXX"
 
 ```bash
 # HTTP transport, no token
-claude mcp add zabbix -t http -e http://your-server:8080/mcp
+claude mcp add --transport http zabbix http://your-server:8080/mcp
 
 # HTTP transport, with token
-claude mcp add zabbix -t http -e http://your-server:8080/mcp -h "Authorization: Bearer zmcp_your-token-here"
-
-# SSE transport, no token
-claude mcp add zabbix -t sse -e http://your-server:8080/sse
+claude mcp add --transport http zabbix http://your-server:8080/mcp \
+    --header "Authorization: Bearer zmcp_your-token-here"
 
 # SSE transport, with token
-claude mcp add zabbix -t sse -e http://your-server:8080/sse -h "Authorization: Bearer zmcp_your-token-here"
+claude mcp add --transport sse zabbix http://your-server:8080/sse \
+    --header "Authorization: Bearer zmcp_your-token-here"
 
 # STDIO transport (local subprocess)
-claude mcp add zabbix -t command -- /opt/zabbix-mcp/venv/bin/zabbix-mcp-server --config /etc/zabbix-mcp/config.toml
+claude mcp add --transport stdio zabbix -- \
+    /opt/zabbix-mcp/venv/bin/zabbix-mcp-server --config /etc/zabbix-mcp/config.toml
 ```
+
+> Verify with `claude mcp list` - `zabbix` should appear in the list. The Client MCP Wizard at `/wizard` generates these snippets pre-filled with your server URL and token.
 
 ##### Claude Desktop — examples
 
@@ -901,7 +903,7 @@ All three paths write to the same `/etc/zabbix-mcp/templates/` directory and are
 
 ## Token Budget
 
-By default the server exposes all ~232 Zabbix API tools. Each tool's JSON schema (name, description, 20-40 optional parameters) adds roughly 400-500 tokens to the MCP tool catalog that is sent to the LLM at the start of every session. **With the default "all tools" configuration, the catalog alone costs ~100k tokens before your first prompt even reaches the model.** This is the single largest driver of token usage - far more than compact vs. extended response mode.
+By default the server exposes all 235 tools (223 Zabbix API + 12 extension). Each tool's JSON schema (name, description, 20-40 optional parameters) adds roughly 400-500 tokens to the MCP tool catalog that is sent to the LLM at the start of every session. **With the default "all tools" configuration, the catalog alone costs ~100k tokens before your first prompt even reaches the model.** This is the single largest driver of token usage - far more than compact vs. extended response mode.
 
 **Fix:** add a `tools` allowlist in `[server]` to expose only what you need:
 
@@ -924,7 +926,7 @@ Or use group names as shortcuts (pulls in more tools per group):
 | `data_collection` | ~107 | template, templategroup, templatedashboard, valuemap, dashboard |
 | `users` | ~30 | user, usergroup, userdirectory, usermacro, token, role, mfa |
 | `administration` | ~39 | settings, housekeeping, authentication, maintenance, map, proxy, ... |
-| `extensions` | ~10 | graph_render, anomaly_detect, capacity_forecast, item_threshold_search, report_generate, ... |
+| `extensions` | 14 | graph_render, anomaly_detect, capacity_forecast, item_threshold_search, report_generate, action_prepare, action_confirm, problem_active_get, host_status_get, hostgroup_overview_get, infrastructure_summary_get, item_history_summary_get, zabbix_raw_api_call, health_check |
 
 The same mechanism works per-token via `[tokens.*].scopes` - see [MCP Authentication](#mcp-authentication-optional).
 
@@ -1108,10 +1110,13 @@ sudo ./deploy/install.sh [COMMAND] [OPTIONS]
 |---|---|
 | `install` | Fresh installation (default) |
 | `update` | Update existing installation, preserve config |
-| `uninstall` | Complete removal — service, config, logs, virtualenv, system user |
+| `uninstall` | Complete removal - service, config, logs, virtualenv, system user |
+| `test-config` (alias `-T`) | Validate `/etc/zabbix-mcp/config.toml` syntax + reachability without restarting the service |
 | `set-admin-password` | Reset the admin portal password |
 | `generate-token <name>` | Generate a new MCP bearer token and add it to `config.toml` |
 | `request-tls --hostname <host> [--email <addr>]` | Obtain a Let's Encrypt cert via certbot, wire it into `[server]`, install a renewal hook that reloads the service. See [TLS / HTTPS](#tls--https). |
+| `--with-reporting` | Force-install PDF reporting deps (Playwright + Chromium, ~250 MB) during install/update |
+| `--without-reporting` | Skip PDF reporting deps even when the prompt would default to install |
 | `--dry-run` | Check prerequisites (Python, firewall, SELinux) without installing |
 | `--install-python` | Automatically install Python 3.12 if no suitable version found |
 | `-h`, `--help` | Show help |

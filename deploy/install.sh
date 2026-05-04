@@ -2018,15 +2018,18 @@ do_request_tls() {
     # Permissions: certbot defaults to root:root 0600 on privkey.pem
     # which the unprivileged $SERVICE_USER cannot read - the service
     # crashes on boot with PermissionError on ctx.load_cert_chain().
-    # Fix: open the live/ + archive/ directories for traversal (other
-    # certs stay protected by their own per-file modes), and grant
-    # group-read on this hostname's privkey to $SERVICE_USER. Files
-    # live in archive/ - live/ is just a symlink to the latest set.
-    chmod 0755 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+    # Fix: chgrp the live/ + archive/ directories to $SERVICE_USER and
+    # chmod 0750 (group traversal only - non-MCP local users still
+    # cannot list which certs are issued, defense in depth against
+    # certificate-subject enumeration), then chgrp + 0640 the privkey
+    # so only root and the service user can read it. Files live in
+    # archive/; live/ is just a symlink lineage to the latest set.
+    chgrp "$SERVICE_USER" /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+    chmod 0750 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
     if [[ -d "/etc/letsencrypt/archive/$hostname" ]]; then
         chgrp "$SERVICE_USER" /etc/letsencrypt/archive/"$hostname"/privkey*.pem 2>/dev/null || true
         chmod 0640 /etc/letsencrypt/archive/"$hostname"/privkey*.pem 2>/dev/null || true
-        ok "Permissions: $SERVICE_USER granted read on /etc/letsencrypt/archive/$hostname/privkey*.pem"
+        ok "Permissions: $SERVICE_USER granted read on /etc/letsencrypt/archive/$hostname/privkey*.pem (live/+archive/ at 0750 root:$SERVICE_USER)"
     fi
 
     # Wire the symlinks into config.toml. Idempotent: existing keys are
@@ -2078,7 +2081,11 @@ if [[ -n "\${RENEWED_LINEAGE:-}" ]]; then
         chmod 0640 "\$archive_dir"/privkey*.pem 2>/dev/null || true
     fi
 fi
-chmod 0755 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+# Re-apply the 0750 root:\$SERVICE_USER directory mode in case certbot
+# reset it. This keeps non-MCP local users from enumerating issued
+# certificate subjects via 'ls /etc/letsencrypt/live/'.
+chgrp "$SERVICE_USER" /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
+chmod 0750 /etc/letsencrypt/live /etc/letsencrypt/archive 2>/dev/null || true
 systemctl reload-or-restart "$SERVICE_NAME" 2>/dev/null || systemctl restart "$SERVICE_NAME"
 HOOK
     chmod 755 "$hook_path"
