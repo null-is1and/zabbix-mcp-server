@@ -778,24 +778,39 @@ install_package() {
 
     # Install reporting dependencies
     if [[ "$INSTALL_REPORTING" == "true" ]]; then
-        info "Installing PDF reporting system libraries..."
+        # Use the same spinner the rest of the installer uses so the
+        # operator sees activity instead of a static "Installing..."
+        # line that looked like a hang while apt-get / dnf was actually
+        # working in the background (reported as #43).
         if [[ -f /etc/redhat-release ]]; then
-            dnf install -y cairo pango gdk-pixbuf2 libffi-devel &>/dev/null || \
+            spin "Installing PDF reporting system libraries (dnf)" \
+                bash -c "dnf install -y cairo pango gdk-pixbuf2 libffi-devel" || \
                 warn "Some system libraries for reporting may be missing. Install: dnf install cairo pango gdk-pixbuf2"
         elif [[ -f /etc/debian_version ]]; then
-            apt-get update -qq &>/dev/null || true
+            spin "Refreshing apt indexes" bash -c "apt-get update -qq" || true
             # libgdk-pixbuf2.0-0 renamed to libgdk-pixbuf-2.0-0 in Debian 13+/Ubuntu 25+
-            apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libffi-dev \
-                libgdk-pixbuf-2.0-0 2>/dev/null || \
-                apt-get install -y libgdk-pixbuf2.0-0 2>/dev/null || \
-                warn "Some system libraries for reporting may be missing. Install: apt-get install libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0"
+            spin "Installing PDF reporting system libraries (apt)" bash -c '
+                apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libffi-dev libgdk-pixbuf-2.0-0 \
+                || apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libffi-dev libgdk-pixbuf2.0-0
+            ' || warn "Some system libraries for reporting may be missing. Install: apt-get install libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0"
         fi
-        spin "Installing PDF reporting dependencies" "$INSTALL_DIR/venv/bin/pip" install --upgrade "$SCRIPT_DIR[reporting]" --quiet
+        spin "Installing PDF reporting Python dependencies" "$INSTALL_DIR/venv/bin/pip" install --upgrade "$SCRIPT_DIR[reporting]" --quiet
     fi
 
     local version
     version=$("$INSTALL_DIR/venv/bin/zabbix-mcp-server" --version 2>&1 || true)
     ok "Installed: $version"
+
+    # Symlink the venv binary into /usr/local/bin so an operator can
+    # run `zabbix-mcp-server --version` without remembering the
+    # /opt/zabbix-mcp/venv/bin path. Reported as part of #43.
+    # ln -sfn replaces an existing symlink atomically; we never
+    # follow into a real file, so a hand-installed binary at the
+    # same path keeps its precedence (-e check below).
+    if [[ -d /usr/local/bin ]] && [[ ! -e /usr/local/bin/zabbix-mcp-server || -L /usr/local/bin/zabbix-mcp-server ]]; then
+        ln -sfn "$INSTALL_DIR/venv/bin/zabbix-mcp-server" /usr/local/bin/zabbix-mcp-server 2>/dev/null \
+            && ok "Symlinked CLI: /usr/local/bin/zabbix-mcp-server -> $INSTALL_DIR/venv/bin/zabbix-mcp-server"
+    fi
 
     # Check if reporting is available
     if "$INSTALL_DIR/venv/bin/python" -c "import weasyprint, jinja2" 2>/dev/null; then
@@ -1000,6 +1015,13 @@ do_update() {
     # Pull latest code if we're in a git repo (skip on re-exec — already pulled)
     if [[ -d "$SCRIPT_DIR/.git" ]] && [[ -z "${WMCP_REEXEC:-}" ]]; then
         if command -v git &>/dev/null; then
+            # Modern git (2.35+) refuses to operate on a repo whose
+            # checkout is owned by a different uid than the caller.
+            # When `sudo ./deploy/install.sh update` is run on a tree
+            # cloned by a non-root user, this aborts the upgrade with
+            # "fatal: detected dubious ownership" - reported in #43.
+            # Mark the path safe for root before any other git call.
+            git config --global --add safe.directory "$SCRIPT_DIR" 2>/dev/null || true
             local need_reexec=false
             local pull_output
             if pull_output=$(git -C "$SCRIPT_DIR" pull --ff-only 2>&1); then
@@ -1156,6 +1178,12 @@ do_uninstall() {
     if [[ -f "/etc/sudoers.d/${SERVICE_NAME}" ]]; then
         rm -f "/etc/sudoers.d/${SERVICE_NAME}"
         ok "Removed sudoers rule"
+    fi
+
+    # Remove /usr/local/bin symlink the install added.
+    if [[ -L /usr/local/bin/zabbix-mcp-server ]]; then
+        rm -f /usr/local/bin/zabbix-mcp-server
+        ok "Removed /usr/local/bin/zabbix-mcp-server"
     fi
 
     # Remove install directory (venv, binaries)
