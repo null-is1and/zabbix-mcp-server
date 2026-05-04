@@ -79,7 +79,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 logger = logging.getLogger("zabbix_mcp.oauth")
 
 # ---------------------------------------------------------------------------
-# Lifetimes
+# Lifetime defaults (operator-overridable via [oauth] in config.toml)
 # ---------------------------------------------------------------------------
 
 # Authorization codes are short-lived per OAuth 2.1 §4.1.3.
@@ -130,10 +130,10 @@ class _PendingAuthorization:
 
     __slots__ = ("client", "params", "expires_at", "authenticated_subject")
 
-    def __init__(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> None:
+    def __init__(self, client: OAuthClientInformationFull, params: AuthorizationParams, ttl_seconds: int = _AUTH_CODE_TTL_SECONDS) -> None:
         self.client = client
         self.params = params
-        self.expires_at = time.time() + _AUTH_CODE_TTL_SECONDS
+        self.expires_at = time.time() + ttl_seconds
         self.authenticated_subject: str | None = None
 
 
@@ -174,11 +174,17 @@ class ZmcpOAuthProvider:
         login_path: str = "/oauth/login",
         registered_clients_loader: Any = None,
         register_client_persister: Any = None,
+        auth_code_ttl_seconds: int = _AUTH_CODE_TTL_SECONDS,
+        access_token_ttl_seconds: int = _ACCESS_TOKEN_TTL_SECONDS,
+        refresh_token_ttl_seconds: int = _REFRESH_TOKEN_TTL_SECONDS,
     ) -> None:
         self._public_url = public_url.rstrip("/")
         self._token_store = token_store
         self._login_path = login_path
         self._persist_client = register_client_persister
+        self._auth_code_ttl = max(60, int(auth_code_ttl_seconds))
+        self._access_token_ttl = max(60, int(access_token_ttl_seconds))
+        self._refresh_token_ttl = max(self._access_token_ttl, int(refresh_token_ttl_seconds))
 
         # client_id -> OAuthClientInformationFull
         self._clients: dict[str, OAuthClientInformationFull] = {}
@@ -250,7 +256,7 @@ class ZmcpOAuthProvider:
         code = AuthorizationCode(
             code=code_str,
             scopes=list(granted_scopes),
-            expires_at=time.time() + _AUTH_CODE_TTL_SECONDS,
+            expires_at=time.time() + self._auth_code_ttl,
             client_id=str(pending.client.client_id or ""),
             code_challenge=pending.params.code_challenge,
             redirect_uri=pending.params.redirect_uri,
@@ -337,7 +343,7 @@ class ZmcpOAuthProvider:
     ) -> str:
         """Hand the user-agent off to our login form; framework redirects them."""
         request_id = _new_secret(24)
-        self.stash_pending(request_id, _PendingAuthorization(client, params))
+        self.stash_pending(request_id, _PendingAuthorization(client, params, ttl_seconds=self._auth_code_ttl))
         return f"{self._public_url}{self._login_path}?request_id={request_id}"
 
     async def load_authorization_code(
@@ -564,7 +570,7 @@ class ZmcpOAuthProvider:
             token=access_str,
             client_id=client_id,
             scopes=scopes,
-            expires_at=now + _ACCESS_TOKEN_TTL_SECONDS,
+            expires_at=now + self._access_token_ttl,
             resource=resource or self._public_url,
         )
         # Carry subject for downstream auth checks; not part of the
@@ -574,7 +580,7 @@ class ZmcpOAuthProvider:
             token=refresh_str,
             client_id=client_id,
             scopes=scopes,
-            expires_at=now + _REFRESH_TOKEN_TTL_SECONDS,
+            expires_at=now + self._refresh_token_ttl,
         )
         self._gc(self._access_tokens, _MAX_LIVE_ACCESS_TOKENS)
         self._gc(self._refresh_tokens, _MAX_LIVE_REFRESH_TOKENS)
@@ -585,7 +591,7 @@ class ZmcpOAuthProvider:
         return OAuthToken(
             access_token=access_str,
             token_type="Bearer",
-            expires_in=_ACCESS_TOKEN_TTL_SECONDS,
+            expires_in=self._access_token_ttl,
             refresh_token=refresh_str,
             scope=" ".join(scopes) if scopes else None,
         )

@@ -176,6 +176,12 @@ class OAuthConfig:
     # (full access) so an operator-driven flow does not have to
     # rediscover the scope catalog.
     default_scopes: list[str] = field(default_factory=lambda: ["*"])
+    # Token lifetimes. Defaults follow OAuth 2.1 / industry norms.
+    # Operators can shorten any of these for a tighter security
+    # posture (paid for in a higher /token call rate from clients).
+    auth_code_ttl_seconds: int = 600         # 10 min  (OAuth 2.1 §4.1.3)
+    access_token_ttl_seconds: int = 3600     # 1 hour
+    refresh_token_ttl_seconds: int = 30 * 24 * 3600  # 30 days, rotated
 
 
 @dataclass(frozen=True)
@@ -608,6 +614,9 @@ def load_config(path: str | Path) -> AppConfig:
         login_path=str(oauth_raw.get("login_path", "/oauth/login") or "/oauth/login"),
         dynamic_registration_enabled=bool(oauth_raw.get("dynamic_registration_enabled", True)),
         default_scopes=[str(s) for s in default_scopes_raw],
+        auth_code_ttl_seconds=int(oauth_raw.get("auth_code_ttl_seconds", 600) or 600),
+        access_token_ttl_seconds=int(oauth_raw.get("access_token_ttl_seconds", 3600) or 3600),
+        refresh_token_ttl_seconds=int(oauth_raw.get("refresh_token_ttl_seconds", 30 * 24 * 3600) or 30 * 24 * 3600),
     )
 
     return AppConfig(

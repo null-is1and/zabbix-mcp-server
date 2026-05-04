@@ -2403,6 +2403,9 @@ def run_server(
                 login_path=config.oauth.login_path,
                 registered_clients_loader=_load_clients,
                 register_client_persister=_persist_client,
+                auth_code_ttl_seconds=config.oauth.auth_code_ttl_seconds,
+                access_token_ttl_seconds=config.oauth.access_token_ttl_seconds,
+                refresh_token_ttl_seconds=config.oauth.refresh_token_ttl_seconds,
             )
             auth_kwargs["auth_server_provider"] = oauth_provider
             auth_kwargs["auth"] = AuthSettings(
