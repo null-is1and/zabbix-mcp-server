@@ -980,18 +980,30 @@ tbody tr:last-child td {
 }
 
 /* Wide-table polish for the tokens list: compact Actions column +
-   Name column max-width override. Reported 2026-05-04 - the table
-   needs to fit a ~960px content area on a 1200px laptop screen
-   without horizontal scroll. The default cell-truncate max-width
-   (240px) is too generous for the Name column when the next nine
-   columns are also competing for room; bring it down to 200px
-   here so a typical token name still reads in full and the
-   long-name edge cases get the same hover-tooltip-with-ellipsis
-   they had at 240px. Actions column drops the per-button
-   min-width and tightens horizontal padding so three buttons +
-   gaps fit naturally. */
-table.tokens-list td.cell-truncate {
-    max-width: 200px;
+   Name column ellipsis on an inner span. Reported 2026-05-04 -
+   the table needs to fit a ~960px content area on a 1200px laptop
+   screen without horizontal scroll, AND a long-name link inside
+   the cell needs to show its full text on hover via the styled
+   data-tooltip popover. Putting the ellipsis on the <td> itself
+   forced overflow:hidden on the cell, which clipped the tooltip
+   popover on the link inside it. The inner .name-trunc span
+   handles ellipsis without changing the cell's overflow, so the
+   tooltip absolute-positioned ::after escapes the cell box and
+   shows above the table. */
+/* Outer wrapper: holds the tooltip; no overflow guard so the popover
+   can escape the cell. Inner .name-trunc handles the actual ellipsis. */
+table.tokens-list .name-cell {
+    display: inline-block;
+    vertical-align: middle;
+    /* position:relative comes from [data-tooltip]; no need to repeat. */
+}
+table.tokens-list .name-trunc {
+    display: inline-block;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 table.tokens-list td.col-actions {
     white-space: nowrap;

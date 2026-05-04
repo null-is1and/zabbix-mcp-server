@@ -59,25 +59,36 @@
                     <input type="checkbox" class="bulk-select" value="{{ token.id }}" aria-label="Select {{ token.name }}">
                 </td>
                 {% endif %}
-                <td class="cell-truncate">
-                    {# Legacy "!" pill rendered FIRST (left of the name)
-                       so a long token name truncating with ellipsis
-                       does not eat the badge - reported 2026-05-04.
-                       Plus data-tooltip on the link itself shows the
-                       full name on hover when the cell-truncate
-                       ellipsis kicks in. #}
+                <td>
+                    {# Truncation moved to an inner inline-block span
+                       (.name-trunc) so the <td> can stay overflow:
+                       visible and the styled tooltip popover from
+                       data-tooltip on the link is not clipped to
+                       invisible. Reported 2026-05-04 - hover on a
+                       long-named token did not show the tooltip.
+                       Legacy "!" pill stays on the left of the name
+                       so the ellipsis cannot eat it. #}
                     {% if token.is_legacy %}
                     <span class="badge badge-warning"
-                          style="margin-right:6px; cursor:pointer; min-width:20px; padding:2px 6px; justify-content:center;"
+                          style="margin-right:6px; cursor:pointer; min-width:20px; padding:2px 6px; justify-content:center; vertical-align:middle;"
                           tabindex="0" role="button"
                           aria-label="Legacy token migrated from auth_token"
                           data-tooltip="Legacy: migrated from the legacy auth_token in config.toml. Recommended: create a new token with proper scopes, server restrictions and IP limits, then remove the legacy auth_token from config.">!</span>
                     {% endif %}
-                    <a href="/tokens/{{ token.id }}"
-                       class="text-primary"
-                       style="font-weight:500;"
-                       tabindex="0"
-                       data-tooltip="{{ token.name }}">{{ token.name }}</a>
+                    {# Tooltip lives on the outer .name-cell wrapper so
+                       its ::after popover does not get clipped by the
+                       .name-trunc inner span's overflow:hidden ellipsis
+                       rule. The hover bubble surfaces from the link
+                       up to the wrapper without extra JS - parent
+                       hover state is inherited by the link too. #}
+                    <span class="name-cell" tabindex="0"
+                          data-tooltip="{{ token.name }}">
+                        <span class="name-trunc">
+                            <a href="/tokens/{{ token.id }}"
+                               class="text-primary"
+                               style="font-weight:500;">{{ token.name }}</a>
+                        </span>
+                    </span>
                 </td>
                 <td>
                     <code class="monospace">{{ token.token_prefix }}</code>
