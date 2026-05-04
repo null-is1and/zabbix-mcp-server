@@ -65,13 +65,13 @@
 <!-- Active Tasks (MCP 2025-11-25 experimental Tasks API) -->
 <div class="card" style="margin-top:1.5em;">
     <div class="card-header">
-        <h2 class="card-title">&#x23F1; Active Tasks</h2>
+        <h2 class="card-title">&#x23F1; Active Tasks <span class="tooltip-icon" tabindex="0" data-tooltip="Async task store added in MCP 2025-11-25 (experimental Tasks API). Long-running tools like report_generate (PDF) can return immediately with a CreateTaskResult; clients then poll tasks/get and pull the final payload via tasks/result. Avoids hitting reverse-proxy / Cloudflare 30s timeouts on big reports. Storage is in-memory only - tasks do not survive a server restart.">&#x1F6C8;</span></h2>
         <span class="text-sm text-muted">In-memory store for long-running tools (report_generate)</span>
     </div>
     <div class="card-body">
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1em;">
             <div>
-                <div class="text-sm text-muted">Live tasks</div>
+                <div class="text-sm text-muted">Live tasks <span class="tooltip-icon" tabindex="0" data-tooltip="Tasks currently in the store (any state: pending / completed / failed but not yet expired). Capped at the soft limit shown - past that, new tasks.create requests get a clear retryable error (TaskStoreFull). The cap stops a runaway client from pinning the process's RAM.">&#x1F6C8;</span></div>
                 <div class="stat-value">{{ tasks_panel.live }} <span class="text-sm text-muted">/ {{ tasks_panel.max }}</span></div>
                 <div style="background:var(--bg-muted); height:6px; border-radius:3px; overflow:hidden; margin-top:4px;">
                     <div style="width:{{ tasks_panel.usage_pct }}%; height:100%; background:{% if tasks_panel.usage_pct < 70 %}var(--green){% elif tasks_panel.usage_pct < 90 %}var(--yellow){% else %}var(--red){% endif %};"></div>
@@ -79,7 +79,7 @@
                 <div class="text-sm text-muted" style="margin-top:2px;">{{ tasks_panel.usage_pct }}% capacity</div>
             </div>
             <div>
-                <div class="text-sm text-muted">Oldest task</div>
+                <div class="text-sm text-muted">Oldest task <span class="tooltip-icon" tabindex="0" data-tooltip="Age of the longest-living task in the store (time since createdAt). Useful for spotting stuck reports - a task older than the default TTL means the sweeper has not run yet, or the task was created with an explicit TTL longer than the default. Dash means the store is empty.">&#x1F6C8;</span></div>
                 <div class="stat-value">
                     {% if tasks_panel.oldest_age_s is none %}
                     <span class="text-muted">-</span>
@@ -94,12 +94,12 @@
                 <div class="text-sm text-muted">since createdAt</div>
             </div>
             <div>
-                <div class="text-sm text-muted">Default TTL</div>
+                <div class="text-sm text-muted">Default TTL <span class="tooltip-icon" tabindex="0" data-tooltip="Time-to-live applied to a task when the client did not request one explicitly. After this many minutes since createdAt the periodic sweeper drops the task and its result, freeing memory. Tasks the client created with an explicit ttl override this default but are still capped by the TTL ceiling on the right.">&#x1F6C8;</span></div>
                 <div class="stat-value">{{ tasks_panel.default_ttl_min }} min</div>
                 <div class="text-sm text-muted">when client omits ttl</div>
             </div>
             <div>
-                <div class="text-sm text-muted">TTL ceiling</div>
+                <div class="text-sm text-muted">TTL ceiling <span class="tooltip-icon" tabindex="0" data-tooltip="Hard upper bound the server applies to any client-supplied ttl, including ones longer than this. Stops a misbehaving client from pinning a result in memory for days or weeks. Anything above this is silently capped at this value with a log warning.">&#x1F6C8;</span></div>
                 <div class="stat-value">{{ tasks_panel.max_ttl_h }} h</div>
                 <div class="text-sm text-muted">max client-supplied</div>
             </div>
@@ -109,7 +109,7 @@
 {% endif %}
 
 <!-- Recent Audit Activity -->
-<div class="card">
+<div class="card" style="margin-top:1.5em;">
     <div class="card-header">
         <h2 class="card-title">Recent Activity</h2>
         <span class="text-sm text-muted">Latest activity</span>
