@@ -775,3 +775,164 @@ def item_threshold_search(
     except Exception as exc:
         logger.exception("Unexpected error in item_threshold_search")
         return _error_json(f"Unexpected error: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# 5. Active problems view
+# ---------------------------------------------------------------------------
+#
+# Original concept and implementation by @fenbays
+# (https://github.com/fenbays/zabbix-mcp-server, commit b38eeb2).
+# Ported and adapted to initMAX style: English-only, hostgroup/severity
+# overrides, no Zabbix-version compatibility fallbacks (we target 6.4+),
+# reuses _filter_active_problems so problem_get(monitored=True) and
+# problem_active_get share the same filter pass.
+
+_SEVERITY_LABELS: dict[str, str] = {
+    "0": "not classified",
+    "1": "information",
+    "2": "warning",
+    "3": "average",
+    "4": "high",
+    "5": "disaster",
+}
+
+
+def _filter_active_problems(
+    problems: list[dict[str, Any]],
+    client_manager: ClientManager,
+    server_name: str,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
+    """Drop problems whose trigger or host is disabled.
+
+    Used by both ``problem_get(monitored=True)`` and ``problem_active_get``.
+
+    Returns a tuple of:
+        - kept: the subset of *problems* whose objectid (triggerid) maps to
+          an enabled trigger AND has at least one enabled host.
+        - host_by_trigger: mapping triggerid -> {"host": <name>, "hostid": <id>}
+          for the enabled host of each kept trigger. Empty for callers that do
+          not need it (the auto-handler ignores it).
+    """
+    if not problems:
+        return [], {}
+
+    trigger_ids = sorted({str(p["objectid"]) for p in problems if p.get("objectid")})
+    if not trigger_ids:
+        return [], {}
+
+    triggers = client_manager.call(server_name, "trigger.get", {
+        "output": ["triggerid", "status"],
+        "triggerids": trigger_ids,
+        "selectHosts": ["hostid", "host", "name", "status"],
+        "filter": {"status": 0},  # enabled triggers only
+    })
+
+    host_by_trigger: dict[str, dict[str, str]] = {}
+    for t in triggers:
+        enabled_hosts = [h for h in t.get("hosts", []) if str(h.get("status", "1")) == "0"]
+        if enabled_hosts:
+            h = enabled_hosts[0]
+            host_by_trigger[str(t["triggerid"])] = {
+                "host": h.get("name") or h.get("host", ""),
+                "hostid": str(h.get("hostid", "")),
+            }
+
+    kept = [p for p in problems if str(p.get("objectid", "")) in host_by_trigger]
+    return kept, host_by_trigger
+
+
+def _ts_to_human(ts: Any) -> str:
+    """Render a Zabbix Unix timestamp as 'YYYY-MM-DD HH:MM UTC'."""
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    except (ValueError, TypeError, OSError):
+        return ""
+
+
+def problem_active_get(
+    client_manager: ClientManager,
+    server_name: str,
+    **kwargs: Any,
+) -> str:
+    """Active problems on enabled triggers and hosts, with LLM-friendly fields.
+
+    Wraps ``problem.get`` with three opinionated filters baked in:
+
+    1. Drop problems whose trigger is disabled.
+    2. Drop problems whose host is disabled.
+    3. Default ``severities = [2, 3, 4, 5]`` - Warning and above only.
+
+    Returns each problem augmented with ``host``, ``hostid``, ``time`` (human
+    readable UTC), and ``severity_label``.
+
+    Args:
+        client_manager: ClientManager instance.
+        server_name: Target Zabbix server name.
+        **kwargs:
+            - ``severities`` (list[int]): Override the default severity floor.
+              Default: [2, 3, 4, 5]. Pass [0,1,2,3,4,5] to include Information.
+            - ``hostids`` (list[str]): Restrict to these hosts.
+            - ``groupids`` (list[str]): Restrict to these host groups.
+            - ``limit`` (int): Max problems to return after filtering.
+              Default: 50.
+            - ``sortfield`` (str): Sort key (default "eventid").
+            - ``sortorder`` (str): "ASC" or "DESC" (default "DESC").
+
+    Returns:
+        JSON ``{"problems": [...], "count": N, "filtered_out": M}`` where
+        *count* is kept problems and *filtered_out* is the number dropped due
+        to disabled trigger/host. On error, ``{"error": "..."}``.
+    """
+    try:
+        severities = kwargs.get("severities") or [2, 3, 4, 5]
+        limit = int(kwargs.get("limit", 50))
+        sortfield = kwargs.get("sortfield", "eventid")
+        sortorder = kwargs.get("sortorder", "DESC")
+
+        params: dict[str, Any] = {
+            "output": "extend",
+            "selectAcknowledges": "count",
+            "severities": severities,
+            "sortfield": sortfield,
+            "sortorder": sortorder,
+            # Pull a wider set than `limit` so the post-filter still has room
+            # to return `limit` valid rows when a chunk is on disabled hosts.
+            "limit": max(limit * 4, limit + 50),
+        }
+        for k in ("hostids", "groupids"):
+            if kwargs.get(k):
+                params[k] = kwargs[k]
+
+        problems: list[dict[str, Any]] = client_manager.call(server_name, "problem.get", params)
+        total = len(problems)
+
+        kept, host_map = _filter_active_problems(problems, client_manager, server_name)
+
+        enriched = []
+        for p in kept[:limit]:
+            tid = str(p.get("objectid", ""))
+            sev = str(p.get("severity", "0"))
+            host_info = host_map.get(tid, {"host": "", "hostid": ""})
+            enriched.append({
+                "eventid": p.get("eventid", ""),
+                "triggerid": tid,
+                "host": host_info["host"],
+                "hostid": host_info["hostid"],
+                "name": p.get("name", ""),
+                "severity": sev,
+                "severity_label": _SEVERITY_LABELS.get(sev, sev),
+                "clock": p.get("clock", ""),
+                "time": _ts_to_human(p.get("clock")),
+                "acknowledged": int(p.get("acknowledged", 0) or 0),
+            })
+
+        return json.dumps({
+            "problems": enriched,
+            "count": len(enriched),
+            "filtered_out": total - len(kept),
+        }, ensure_ascii=False)
+
+    except Exception as exc:
+        logger.exception("Unexpected error in problem_active_get")
+        return _error_json(f"Unexpected error: {exc}")

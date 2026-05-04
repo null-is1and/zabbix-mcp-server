@@ -856,9 +856,13 @@ def _build_zabbix_params(
 
     # For get methods: build params dict from individual arguments
     params: dict[str, Any] = {}
+    # Client-side post-filter flags handled in _make_tool_handler, not by Zabbix
+    _CLIENT_SIDE_PARAMS = {("problem.get", "monitored")}
     for param_def in method_def.params:
         if param_def.name == "extra_params":
             continue  # handled below
+        if (method_def.api_method, param_def.name) in _CLIENT_SIDE_PARAMS:
+            continue  # stripped: applied as post-filter, never sent to Zabbix
         if param_def.name in args:
             value = args[param_def.name]
             # Normalise the ``output`` field for Zabbix's API:
@@ -1358,6 +1362,12 @@ def _make_tool_handler(
             zabbix_version = await asyncio.to_thread(
                 client_manager.get_version, server_name,
             )
+            # Capture client-side post-filter flags before _build_zabbix_params
+            # strips them from the API payload.
+            _problem_monitored = (
+                method_def.api_method == "problem.get"
+                and bool(kwargs.get("monitored"))
+            )
             params = _build_zabbix_params(
                 method_def, kwargs, zabbix_version,
                 allowed_import_dirs=allowed_import_dirs,
@@ -1376,6 +1386,12 @@ def _make_tool_handler(
                 result = await asyncio.to_thread(
                     client_manager.call, server_name, method_def.api_method, params,
                 )
+            if _problem_monitored and isinstance(result, list):
+                from zabbix_mcp.api.extensions import _filter_active_problems
+                kept, _ = await asyncio.to_thread(
+                    _filter_active_problems, result, client_manager, server_name,
+                )
+                result = kept
             return _format_result(_truncate_result(result, max_chars=response_max_chars), raw_json)
 
         except ToolError:
@@ -1610,7 +1626,7 @@ def _register_tools(
     # ------------------------------------------------------------------
     # Extension tools (server-side analytics, graph export, reporting)
     # ------------------------------------------------------------------
-    from zabbix_mcp.api.extensions import graph_render, anomaly_detect, capacity_forecast, item_threshold_search
+    from zabbix_mcp.api.extensions import graph_render, anomaly_detect, capacity_forecast, item_threshold_search, problem_active_get
 
     async def _graph_render(
         *,
@@ -1756,6 +1772,58 @@ def _register_tools(
     if _ext_allowed("item_threshold_search"):
         mcp.add_tool(
             _item_threshold_search, name="item_threshold_search",
+            annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+        )
+        count += 1
+
+    async def _problem_active_get(
+        *,
+        severities: Annotated[Optional[list[int]], Field(description="Severity floor as a list of numeric codes. Default [2,3,4,5] (Warning and above). Pass [0,1,2,3,4,5] to include Information / Not classified.")] = None,
+        hostids: Annotated[Optional[list[str]], Field(description="Restrict to problems on these hosts.")] = None,
+        groupids: Annotated[Optional[list[str]], Field(description="Restrict to problems on hosts in these host groups.")] = None,
+        limit: Annotated[Optional[int], Field(description="Max problems to return after filtering disabled triggers/hosts (default 50).")] = 50,
+        sortfield: Annotated[Optional[str], Field(description="Problem sort key (default 'eventid').")] = "eventid",
+        sortorder: Annotated[Optional[str], Field(description="'ASC' or 'DESC' (default 'DESC').")] = "DESC",
+        server: Annotated[Optional[str], Field(description=server_desc)] = None,
+        raw_json: Annotated[bool, Field(description=_RAW_JSON_PARAM_DESC)] = False,
+    ) -> str:
+        """Real, actionable problems right now -- the PRIMARY tool for an LLM
+        asked "what is wrong on the Zabbix server?".
+
+        Returns only problems where BOTH the trigger AND the host are enabled,
+        with severity Warning (2) or above. Skips the noise that problem_get
+        would return: stale alerts on disabled triggers, problems on hosts
+        that were taken out of monitoring but not deleted, and Information /
+        Not classified events that operators do not act on.
+
+        Each problem comes back with the host name, severity_label
+        ("warning", "high", "disaster", ...), and `time` rendered as a
+        human-readable UTC string. Use this whenever the operator asks
+        "active problems", "current issues", "what is firing", "real
+        problems", or "skip disabled".
+
+        For an unfiltered raw view (e.g. to also see stale problems), use
+        problem_get instead.
+
+        Returns {"problems": [...], "count": N, "filtered_out": M} where
+        filtered_out = problems dropped due to disabled trigger/host.
+        """
+        _raw_err = _check_raw_json_allowed(bool(raw_json))
+        if _raw_err:
+            raise ToolError(_raw_err)
+        srv = client_manager.resolve_server(server or client_manager.default_server)
+        _auth_err = check_token_authorization(srv, tool_prefix="problem")
+        if _auth_err:
+            raise ToolError(_auth_err)
+        return _raise_if_extension_error(await asyncio.to_thread(
+            problem_active_get, client_manager, srv,
+            severities=severities, hostids=hostids, groupids=groupids,
+            limit=limit, sortfield=sortfield, sortorder=sortorder,
+        ), raw_json=bool(raw_json))
+
+    if _ext_allowed("problem_active_get"):
+        mcp.add_tool(
+            _problem_active_get, name="problem_active_get",
             annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
         )
         count += 1

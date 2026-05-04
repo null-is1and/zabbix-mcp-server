@@ -1503,6 +1503,100 @@ class TestBuildZabbixParams(unittest.TestCase):
             self.assertIn(m.array_param, param_names,
                           f"{m.api_method}: array_param '{m.array_param}' not in params")
 
+    def test_problem_get_strips_monitored(self):
+        """problem.get's `monitored` is a client-side post-filter, never sent to Zabbix."""
+        md = next(m for m in ALL_METHODS if m.api_method == "problem.get")
+        self.assertIn("monitored", [p.name for p in md.params])
+        result = _build_zabbix_params(md, {"monitored": True, "recent": True})
+        self.assertNotIn("monitored", result)
+        self.assertTrue(result.get("recent"))
+
+
+class TestProblemActiveExtension(unittest.TestCase):
+    """Unit tests for the problem_active_get extension and shared filter helper."""
+
+    def _stub_client(self, triggers):
+        from unittest.mock import MagicMock
+        cm = MagicMock()
+        cm.call.return_value = triggers
+        return cm
+
+    def test_filter_drops_disabled_trigger(self):
+        from zabbix_mcp.api.extensions import _filter_active_problems
+        problems = [
+            {"eventid": "1", "objectid": "100", "name": "p1"},
+            {"eventid": "2", "objectid": "101", "name": "p2"},
+        ]
+        # trigger.get with filter status=0 returns only the enabled one
+        cm = self._stub_client([
+            {"triggerid": "100", "status": "0",
+             "hosts": [{"hostid": "10", "name": "h1", "host": "h1", "status": "0"}]},
+        ])
+        kept, host_map = _filter_active_problems(problems, cm, "srv")
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["objectid"], "100")
+        self.assertEqual(host_map["100"]["host"], "h1")
+        self.assertEqual(host_map["100"]["hostid"], "10")
+
+    def test_filter_drops_disabled_host(self):
+        from zabbix_mcp.api.extensions import _filter_active_problems
+        problems = [{"eventid": "1", "objectid": "100", "name": "p"}]
+        cm = self._stub_client([
+            {"triggerid": "100", "status": "0",
+             "hosts": [{"hostid": "10", "name": "h1", "host": "h1", "status": "1"}]},
+        ])
+        kept, host_map = _filter_active_problems(problems, cm, "srv")
+        self.assertEqual(kept, [])
+        self.assertEqual(host_map, {})
+
+    def test_filter_empty_input_short_circuits(self):
+        from zabbix_mcp.api.extensions import _filter_active_problems
+        from unittest.mock import MagicMock
+        cm = MagicMock()
+        kept, host_map = _filter_active_problems([], cm, "srv")
+        self.assertEqual(kept, [])
+        self.assertEqual(host_map, {})
+        cm.call.assert_not_called()
+
+    def test_problem_active_get_response_shape(self):
+        from zabbix_mcp.api.extensions import problem_active_get
+        from unittest.mock import MagicMock
+        cm = MagicMock()
+        # First call: problem.get; second call: trigger.get
+        cm.call.side_effect = [
+            [
+                {"eventid": "9", "objectid": "100", "name": "CPU > 90%",
+                 "severity": "4", "clock": "1747000000", "acknowledged": "0"},
+                {"eventid": "10", "objectid": "200", "name": "old",
+                 "severity": "3", "clock": "1747000000", "acknowledged": "1"},
+            ],
+            [
+                {"triggerid": "100", "status": "0",
+                 "hosts": [{"hostid": "10", "name": "web1", "host": "web1", "status": "0"}]},
+            ],
+        ]
+        out = problem_active_get(cm, "srv")
+        import json as _json
+        body = _json.loads(out)
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["filtered_out"], 1)
+        prob = body["problems"][0]
+        self.assertEqual(prob["host"], "web1")
+        self.assertEqual(prob["severity_label"], "high")
+        self.assertTrue(prob["time"].endswith("UTC"))
+        self.assertEqual(prob["eventid"], "9")
+
+    def test_problem_active_get_default_severity_floor(self):
+        from zabbix_mcp.api.extensions import problem_active_get
+        from unittest.mock import MagicMock
+        cm = MagicMock()
+        cm.call.side_effect = [[], []]  # empty problem.get -> short circuit
+        problem_active_get(cm, "srv")
+        # First call must have severities=[2,3,4,5] when caller did not override
+        first_call_args = cm.call.call_args_list[0]
+        self.assertEqual(first_call_args.args[1], "problem.get")
+        self.assertEqual(first_call_args.args[2]["severities"], [2, 3, 4, 5])
+
 
 class TestSecurityPathTraversal(unittest.TestCase):
     """Security tests for path traversal attacks in source_file resolution."""

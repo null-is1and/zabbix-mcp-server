@@ -1,19 +1,18 @@
 # Changelog
 
-## v1.28 - planned
+## v1.28 - unreleased
 
-- Dynamic tools/list filtering by token scopes (issue #38, port from
-  @fenbays fork). A monitoring-only token sees only the monitoring
-  tools in tools/list instead of the full 256-tool surface; cuts
-  initial-handshake token cost and stops the LLM from "trying" tools
-  it cannot call.
-- Active-only problem filter (issue #39): `problem_get(monitored=True)`
-  parameter + `problem_active_get` extension tool that wraps it with
-  severity floor and human-readable timestamps. Skips problems on
-  disabled triggers / hosts so SRE chats only see real ongoing alerts.
-- OAuth 2.0 / OIDC discovery for mcp-remote and Claude Desktop remote
-  (issue #36) - exposes `/.well-known/oauth-authorization-server` so
-  remote clients can negotiate auth without a hardcoded bearer.
+### Added
+
+- **Active-only problem filter** (issue #39, original concept by [@fenbays](https://github.com/fenbays/zabbix-mcp-server/commit/b38eeb2)). Two doors into the same data:
+  - `problem_get(monitored=True)` - new boolean parameter on the existing tool, matches the semantic of `host_get`/`item_get`'s `monitored` flag. When set, problems whose trigger has `status != 0` or whose host has `status != 0` are dropped client-side after the API fetch (Zabbix has no native `monitored` flag on `problem.get`). Default `false` keeps backwards-compat: an unfiltered call still returns every problem on file.
+  - `problem_active_get` - new extension tool that pre-bakes the right defaults for an LLM that just wants "what is wrong right now": `severities=[2,3,4,5]` (Warning and above), the `monitored` filter from above, and per-row enrichment with `host`, `hostid`, `time` (UTC, human-readable like `"2026-04-28 17:30 UTC"`), and `severity_label`. Returns `{"problems": [...], "count": N, "filtered_out": M}` so callers can tell how much got dropped vs. how much got kept. Tighter prompt budget than `problem_get` because the LLM does not have to know about disabled-trigger noise or numeric severity codes.
+- The `monitored` flag on `problem_get` and the `problem_active_get` enrichment share a single helper (`_filter_active_problems`) so the filter logic stays in one place.
+
+### Planned
+
+- Dynamic tools/list filtering by token scopes (issue #38, port from @fenbays fork). A monitoring-only token sees only the monitoring tools in tools/list instead of the full 256-tool surface; cuts initial-handshake token cost and stops the LLM from "trying" tools it cannot call.
+- OAuth 2.0 / OIDC discovery for mcp-remote and Claude Desktop remote (issue #36) - exposes `/.well-known/oauth-authorization-server` so remote clients can negotiate auth without a hardcoded bearer.
 
 ## v1.27 - 2026-05-04
 

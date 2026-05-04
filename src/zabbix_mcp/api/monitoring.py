@@ -485,19 +485,25 @@ _PROBLEM_GET = MethodDef(
     api_method="problem.get",
     tool_name="problem_get",
     description=(
-        "Retrieve current/active problems (unresolved alerts). This is the "
-        "PRIMARY tool for checking what is wrong right now -- it returns only "
-        "problems that have not yet been resolved. Use this first when asked "
-        "about active alerts, current issues, or ongoing incidents. "
-        "For historical events (including resolved), use event.get instead. "
-        "Filter by 'hostids' or 'groupids' to scope to specific hosts or "
-        "groups, by 'severity_min' to focus on important issues, and by "
-        "'acknowledged' or 'suppressed' to filter by operational state. "
-        "The 'recent' flag limits results to problems created in the last "
-        "30 minutes."
+        "Low-level audit retrieval of unresolved Zabbix problems. Returns "
+        "raw rows with numeric severities and Unix timestamps, no host "
+        "name, no severity label. "
+        "**For an operator chat question** ('what is wrong right now', "
+        "'active problems', 'current alerts', 'real problems') call "
+        "problem_active_get instead -- it returns the same problems but "
+        "with disabled-trigger/host noise dropped, host names attached, "
+        "and human-readable time/severity, so the LLM does not have to "
+        "post-process or chain three tools. "
+        "Reach for problem_get only when you specifically need raw rows "
+        "for a script, a bulk audit of every problem (including stale "
+        "ones), or filters problem_active_get does not expose "
+        "('acknowledged', 'suppressed', 'recent', 'time_from', 'time_till'). "
+        "For historical events (including resolved), use event.get instead."
     ),
     read_only=True,
-    compact_fields=("eventid", "name", "severity", "clock", "r_clock"),
+    # objectid is needed by problem_get(monitored=True) post-filter to
+    # cross-reference problems with their trigger / host status.
+    compact_fields=("eventid", "name", "severity", "clock", "r_clock", "objectid"),
     params=COMMON_GET_PARAMS + [
         ParamDef(
             "eventids", "list[str]",
@@ -557,6 +563,14 @@ _PROBLEM_GET = MethodDef(
             "evaltype", "int",
             "Tag filter evaluation mode: 0=AND/OR (default, all tag "
             "conditions must match), 2=OR (any tag condition may match).",
+        ),
+        ParamDef(
+            "monitored", "bool",
+            "If true, drop problems whose trigger is disabled (status != 0) "
+            "or whose host is disabled (status != 0). Same semantic as "
+            "host_get's 'monitored' / item_get's 'monitored'. Useful to "
+            "skip stale problems lingering on de-monitored objects. "
+            "Default: false (returns every problem Zabbix has on file).",
         ),
     ],
 )

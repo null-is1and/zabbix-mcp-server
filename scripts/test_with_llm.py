@@ -81,7 +81,7 @@ TOOLSETS = {
         "item_get", "item_create", "item_update", "item_delete",
         "item_threshold_search",
         "trigger_get", "trigger_create", "trigger_update", "trigger_delete",
-        "problem_get", "event_get", "event_acknowledge",
+        "problem_get", "problem_active_get", "event_get", "event_acknowledge",
         # History / trends / graphs
         "history_get", "trend_get",
         "graph_get", "graphitem_get", "graph_render",
@@ -130,6 +130,7 @@ SCENARIOS: list[dict[str, Any]] = [
     # === Monitoring / triage ===
     {"id": "hosts_listing", "tools": "monitoring", "prompt": "List the first 5 hosts being monitored, with their status."},
     {"id": "problems_now", "tools": "monitoring", "prompt": "What problems are currently active on the Zabbix server? Show severity and host."},
+    {"id": "problems_active_only", "tools": "monitoring", "prompt": "I only want REAL problems right now - skip anything from disabled triggers or hosts that are no longer being monitored. Give me 5 with host name, severity label, and when they fired."},
     {"id": "hosts_down", "tools": "monitoring", "prompt": "Which hosts are currently offline or unreachable?"},
     {"id": "host_groups", "tools": "monitoring", "prompt": "What host groups exist? Just the names."},
     {"id": "templates_list", "tools": "monitoring", "prompt": "List 5 templates configured on this Zabbix instance."},
