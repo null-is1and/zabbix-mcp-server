@@ -1022,6 +1022,99 @@ _RAW_JSON_PARAM_DESC = (
 _TASK_AUGMENTED_TOOLS = frozenset({"report_generate"})
 
 
+# ---------------------------------------------------------------------------
+# Tools/list filtering by calling token scopes
+# ---------------------------------------------------------------------------
+
+# Extension tools that perform write operations on Zabbix and must be hidden
+# from a read-only token's tools/list. The auto-generated tools are flagged
+# via MethodDef.read_only; this set covers the hand-rolled extension tools.
+_WRITE_EXTENSION_TOOLS: frozenset[str] = frozenset({
+    "action_prepare", "action_confirm",
+    "zabbix_raw_api_call",  # caller can invoke any Zabbix method, including writes
+})
+
+
+def _build_write_tools_set() -> frozenset[str]:
+    """Names of every registered tool that mutates state on the Zabbix server.
+
+    Built once at server boot from the MethodDef registry plus the
+    hand-rolled extension write tools above. Used by _filter_tools_by_token
+    to drop write tools from a read-only token's tools/list view.
+    """
+    from zabbix_mcp.api import ALL_METHODS
+    auto = {m.tool_name for m in ALL_METHODS if not m.read_only}
+    return frozenset(auto | _WRITE_EXTENSION_TOOLS)
+
+
+def _filter_tools_by_token(tools: list) -> list:
+    """Trim a tools/list response to what the current token may actually call.
+
+    Reads the calling token from ``current_token_info`` (set by the auth
+    middleware) and applies two filters:
+
+    1. **Scope filter.** Tokens with ``scopes = ["*"]`` (or unset) keep
+       the full catalog. Otherwise the scope list is expanded via
+       ``_expand_tool_groups`` (groups -> prefixes), and only tools
+       whose ``tool_name.rsplit("_", 1)[0]`` matches an allowed prefix
+       survive. Extension tools (which carry no underscore-separable
+       prefix) are matched by exact tool name plus an "extensions"
+       group shortcut.
+
+    2. **Read-only filter.** Tokens with ``read_only = true`` never
+       see write tools (``*_create / *_update / *_delete``, the mass*
+       methods, ``action_prepare/confirm``, ``zabbix_raw_api_call``,
+       etc.). The set is precomputed in ``_WRITE_TOOLS``.
+
+    When no token is in context (stdio transport, or pre-auth handshake
+    where the contextvar is still None), returns the input unchanged
+    so existing single-token / no-auth setups behave as before.
+    """
+    from zabbix_mcp.token_store import current_token_info
+    token = current_token_info.get()
+    if token is None:
+        return tools
+
+    read_only = bool(getattr(token, "read_only", False))
+    scopes = list(getattr(token, "scopes", None) or [])
+    has_wildcard = (not scopes) or "*" in scopes
+
+    if has_wildcard:
+        if read_only:
+            return [t for t in tools if t.name not in _WRITE_TOOLS]
+        return tools
+
+    from zabbix_mcp.config import _expand_tool_groups, TOOL_GROUPS
+    allowed_prefixes = set(_expand_tool_groups(scopes))
+    extension_names = set(TOOL_GROUPS.get("extensions", []))
+    has_extensions_scope = "extensions" in scopes
+
+    out = []
+    for t in tools:
+        if read_only and t.name in _WRITE_TOOLS:
+            continue
+        # Extension tools: identified by the exact-name list in TOOL_GROUPS
+        if t.name in extension_names:
+            if has_extensions_scope or t.name in allowed_prefixes:
+                out.append(t)
+            continue
+        # Regular tools: prefix match (e.g. "host_create" -> "host")
+        prefix = t.name.rsplit("_", 1)[0] if "_" in t.name else t.name
+        if prefix in allowed_prefixes:
+            out.append(t)
+    return out
+
+
+# Built lazily on first access (after ALL_METHODS has finished importing).
+_WRITE_TOOLS: frozenset[str] = frozenset()
+
+
+def _ensure_write_tools_set() -> None:
+    global _WRITE_TOOLS
+    if not _WRITE_TOOLS:
+        _WRITE_TOOLS = _build_write_tools_set()
+
+
 def _patch_fastmcp_convert_result_for_tasks() -> None:
     """Make FastMCP's result converter propagate ``CreateTaskResult``.
 
@@ -2445,10 +2538,16 @@ def run_server(
         _task_store._max_live_tasks,
     )
 
-    # Override list_tools so report_generate advertises taskSupport=optional.
-    # FastMCP's own list_tools does not expose the execution field, so we
-    # decorate the low-level Server with a wrapper that calls FastMCP's
-    # list_tools and patches the relevant entries on the way out.
+    # Override list_tools so:
+    #   1. report_generate advertises taskSupport=optional (FastMCP's own
+    #      list_tools does not expose the execution field).
+    #   2. The response is filtered by the calling token's scopes -- a
+    #      monitoring-only token sees only monitoring tools, a read-only
+    #      token does not see *_create / *_update / *_delete / etc. The
+    #      runtime authorization check in _make_tool_handler stays the
+    #      source of truth, but pruning the catalog here keeps the LLM
+    #      from receiving schemas for tools it cannot call (token-bloat
+    #      and "model tries unauthorized tool" issues).
     _orig_list_tools_handler = mcp._mcp_server.request_handlers.get(ListToolsRequest)
 
     async def _list_tools_with_execution(req):
@@ -2457,6 +2556,7 @@ def run_server(
         for tool in tools_list:
             if tool.name in _TASK_AUGMENTED_TOOLS:
                 tool.execution = ToolExecution(taskSupport="optional")
+        tools_list = _filter_tools_by_token(tools_list)
         return ServerResult(ListToolsResult(tools=tools_list))
 
     mcp._mcp_server.request_handlers[ListToolsRequest] = _list_tools_with_execution
@@ -2468,6 +2568,9 @@ def run_server(
         response_max_chars=config.server.response_max_chars,
         config=config,
     )
+    # Build the write-tools set for the tools/list scope filter once we
+    # know everything that will ever be registered.
+    _ensure_write_tools_set()
     if config.server.tools or config.server.disabled_tools:
         parts = []
         if config.server.tools:

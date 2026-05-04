@@ -181,7 +181,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "monitoring": [
         "host", "hostgroup", "hostinterface", "hostprototype",
         "item", "itemprototype", "trigger", "triggerprototype",
-        "problem", "event", "history", "trend",
+        "problem", "problem_active_get", "event", "history", "trend",
         "graph", "graphitem", "graphprototype",
         "discoveryrule", "discoveryruleprototype",
         "dcheck", "dhost", "drule", "dservice", "httptest", "sla",
@@ -206,7 +206,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     ],
     "extensions": [
         "graph_render", "anomaly_detect", "capacity_forecast",
-        "item_threshold_search",
+        "item_threshold_search", "problem_active_get",
         "report_generate", "action_prepare", "action_confirm",
         "zabbix_raw_api_call", "health_check",
     ],

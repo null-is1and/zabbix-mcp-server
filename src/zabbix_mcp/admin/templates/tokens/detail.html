@@ -43,7 +43,7 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Scopes <span class="tooltip-icon" tabindex="0" data-tooltip="Tool groups this token may call. Drag tools between Allowed and Denied to fine-tune. Reducing scopes blocks pending calls immediately - no restart needed.">&#x1F6C8;</span></label>
+                <label class="form-label">Scopes <span class="tooltip-icon" tabindex="0" data-tooltip="Tool groups this token may call. Drag tools between Allowed and Denied to fine-tune. Reducing scopes blocks pending calls immediately - no restart needed. From v1.28, denied tools are also hidden from the client's tools/list response, so the LLM never receives schemas for tools it cannot call.">&#x1F6C8;</span></label>
                 <input type="hidden" name="scopes" id="scopes-input" value="{{ token.scopes | join(',') }}">
                 <div class="form-hint" style="margin-bottom:8px;">Click groups or individual tools to toggle access. Drag between zones or click to toggle.</div>
                 <input type="text" class="form-input" placeholder="Search tools and groups..."

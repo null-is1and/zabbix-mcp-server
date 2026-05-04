@@ -1598,6 +1598,111 @@ class TestProblemActiveExtension(unittest.TestCase):
         self.assertEqual(first_call_args.args[2]["severities"], [2, 3, 4, 5])
 
 
+class TestToolsListTokenFilter(unittest.TestCase):
+    """tools/list filtering against per-token scopes (#38)."""
+
+    def setUp(self):
+        from zabbix_mcp import server as srv
+        srv._ensure_write_tools_set()
+        # Use simple namespace objects masquerading as MCPTool entries
+        from types import SimpleNamespace as NS
+        self.tools = [
+            NS(name="host_get"),
+            NS(name="host_create"),
+            NS(name="host_update"),
+            NS(name="host_delete"),
+            NS(name="hostgroup_get"),
+            NS(name="problem_get"),
+            NS(name="problem_active_get"),
+            NS(name="user_get"),
+            NS(name="user_create"),
+            NS(name="action_create"),
+            NS(name="action_prepare"),
+            NS(name="zabbix_raw_api_call"),
+            NS(name="graph_render"),
+            NS(name="health_check"),
+            NS(name="capacity_forecast"),
+        ]
+        self.token_cls = NS
+
+    def _filter_with(self, scopes, read_only=False):
+        from zabbix_mcp.server import _filter_tools_by_token
+        from zabbix_mcp.token_store import current_token_info
+        token = self.token_cls(scopes=scopes, read_only=read_only)
+        tok_token = current_token_info.set(token)
+        try:
+            return [t.name for t in _filter_tools_by_token(self.tools)]
+        finally:
+            current_token_info.reset(tok_token)
+
+    def test_no_token_returns_full_list(self):
+        from zabbix_mcp.server import _filter_tools_by_token
+        # No token in context (e.g. stdio mode) -> no filtering
+        names = [t.name for t in _filter_tools_by_token(self.tools)]
+        self.assertEqual(names, [t.name for t in self.tools])
+
+    def test_wildcard_scope_returns_full_list(self):
+        names = self._filter_with(["*"])
+        self.assertEqual(names, [t.name for t in self.tools])
+
+    def test_empty_scope_returns_full_list(self):
+        # Treat empty/None scopes the same as ["*"] for backwards compat.
+        names = self._filter_with([])
+        self.assertEqual(names, [t.name for t in self.tools])
+
+    def test_read_only_token_drops_write_tools(self):
+        # Read-only with wildcard scopes: keep all read tools, drop writes.
+        names = self._filter_with(["*"], read_only=True)
+        self.assertIn("host_get", names)
+        self.assertIn("problem_get", names)
+        self.assertIn("graph_render", names)
+        self.assertNotIn("host_create", names)
+        self.assertNotIn("host_update", names)
+        self.assertNotIn("host_delete", names)
+        self.assertNotIn("user_create", names)
+        self.assertNotIn("action_prepare", names)
+        self.assertNotIn("zabbix_raw_api_call", names)
+
+    def test_monitoring_scope_keeps_only_monitoring(self):
+        names = self._filter_with(["monitoring"])
+        # monitoring group includes host, hostgroup, problem -> these in
+        self.assertIn("host_get", names)
+        self.assertIn("host_create", names)  # not read-only token, so writes survive
+        self.assertIn("hostgroup_get", names)
+        self.assertIn("problem_get", names)
+        # user/action/extensions are out of scope
+        self.assertNotIn("user_get", names)
+        self.assertNotIn("user_create", names)
+        self.assertNotIn("action_create", names)
+        self.assertNotIn("graph_render", names)
+
+    def test_extensions_scope_brings_in_extension_tools(self):
+        names = self._filter_with(["extensions"])
+        self.assertIn("graph_render", names)
+        self.assertIn("health_check", names)
+        self.assertIn("capacity_forecast", names)
+        self.assertNotIn("host_get", names)
+
+    def test_individual_extension_tool_in_scope(self):
+        # If user grants only graph_render explicitly, only that extension
+        # tool comes back, the rest of "extensions" group stays hidden.
+        names = self._filter_with(["graph_render"])
+        self.assertIn("graph_render", names)
+        self.assertNotIn("health_check", names)
+        self.assertNotIn("capacity_forecast", names)
+
+    def test_monitoring_plus_read_only_keeps_only_reads(self):
+        names = self._filter_with(["monitoring"], read_only=True)
+        self.assertIn("host_get", names)
+        self.assertIn("hostgroup_get", names)
+        self.assertIn("problem_get", names)
+        self.assertIn("problem_active_get", names)
+        # writes within monitoring scope are still dropped
+        self.assertNotIn("host_create", names)
+        self.assertNotIn("host_update", names)
+        self.assertNotIn("host_delete", names)
+
+
 class TestSecurityPathTraversal(unittest.TestCase):
     """Security tests for path traversal attacks in source_file resolution."""
 
