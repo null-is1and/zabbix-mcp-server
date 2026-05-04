@@ -119,11 +119,12 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Timestamp</th>
-                        <th>Action</th>
-                        <th>User</th>
-                        <th>Target</th>
-                        <th>IP</th>
+                        {% set _arrows %}<span class="sort-arrows"><span class="sort-arrow sort-arrow-up">&#x2191;</span><span class="sort-arrow sort-arrow-down">&#x2193;</span></span>{% endset %}
+                        <th class="sortable">Timestamp{{ _arrows }}</th>
+                        <th class="sortable">Action{{ _arrows }}</th>
+                        <th class="sortable">User{{ _arrows }}</th>
+                        <th class="sortable">Target{{ _arrows }}</th>
+                        <th class="sortable">IP{{ _arrows }}</th>
                     </tr>
                 </thead>
                 <tbody id="recent-activity-body">

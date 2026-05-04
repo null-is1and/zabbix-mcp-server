@@ -38,14 +38,15 @@
                     <input type="checkbox" id="bulk-select-all" onchange="bulkSelectAll(this.checked)" aria-label="Select all">
                 </th>
                 {% endif %}
-                <th class="sortable">Name<span class="sort-arrows"><span class="sort-arrow sort-arrow-up">&#x2191;</span><span class="sort-arrow sort-arrow-down">&#x2193;</span></span></th>
-                <th>Prefix</th>
-                <th>Scopes</th>
-                <th>Servers</th>
-                <th>Read-only</th>
-                <th>IP Restrictions</th>
-                <th class="sortable">Status<span class="sort-arrows"><span class="sort-arrow sort-arrow-up">&#x2191;</span><span class="sort-arrow sort-arrow-down">&#x2193;</span></span></th>
-                <th class="sortable">Last Used<span class="sort-arrows"><span class="sort-arrow sort-arrow-up">&#x2191;</span><span class="sort-arrow sort-arrow-down">&#x2193;</span></span></th>
+                {% set _arrows %}<span class="sort-arrows"><span class="sort-arrow sort-arrow-up">&#x2191;</span><span class="sort-arrow sort-arrow-down">&#x2193;</span></span>{% endset %}
+                <th class="sortable">Name{{ _arrows }}</th>
+                <th class="sortable">Prefix{{ _arrows }}</th>
+                <th class="sortable">Scopes{{ _arrows }}</th>
+                <th class="sortable">Servers{{ _arrows }}</th>
+                <th class="sortable">Read-only{{ _arrows }}</th>
+                <th class="sortable">IP Restrictions{{ _arrows }}</th>
+                <th class="sortable">Status{{ _arrows }}</th>
+                <th class="sortable">Last Used{{ _arrows }}</th>
                 <th>Actions</th>
             </tr>
         </thead>
