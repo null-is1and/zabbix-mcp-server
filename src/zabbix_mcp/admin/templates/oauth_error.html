@@ -1,0 +1,58 @@
+{#
+  Zabbix MCP Server
+  Copyright (C) 2026 initMAX s.r.o.
+  Licensed under the GNU Affero General Public License v3.
+  See LICENSE for details.
+#}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authorization error - Zabbix MCP</title>
+    <link rel="stylesheet" href="/static/style.css?v={{ version }}">
+</head>
+<body>
+    <div class="login-page">
+        <div class="theme-switcher-login">
+            <button class="theme-btn" onclick="setTheme('light')" title="Light mode">&#x2600;&#xFE0F;</button>
+            <button class="theme-btn" onclick="setTheme('auto')" title="Auto (system)">&#x1F5A5;&#xFE0F;</button>
+            <button class="theme-btn" onclick="setTheme('dark')" title="Dark mode">&#x1F319;</button>
+        </div>
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="/static/logo-horizontal-dark.svg" alt="initMAX" class="logo-light-theme" style="height: 48px;">
+                <img src="/static/logo-horizontal-light.svg" alt="initMAX" class="logo-dark-theme" style="height: 48px;">
+            </div>
+            <h1 class="login-title">Authorization request invalid</h1>
+
+            <div class="login-error">{{ message }}</div>
+
+            <p style="text-align: center; color: var(--text-muted); font-size: 0.85rem; margin-top: 16px;">
+                Close this window and start again from your MCP client.
+            </p>
+        </div>
+        <div class="login-footer">
+            <a href="https://www.initmax.com" target="_blank" style="color:inherit; text-decoration:none;">&copy; {{ year }} initMAX s.r.o.</a>
+        </div>
+    </div>
+
+    <script>
+    function setTheme(mode) {
+        localStorage.setItem('theme', mode);
+        applyTheme();
+    }
+    function applyTheme() {
+        var saved = localStorage.getItem('theme') || 'auto';
+        var resolved = saved === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+            : saved;
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.querySelectorAll('.theme-btn').forEach(function(btn) { btn.classList.remove('active'); });
+        var idx = {light: 0, auto: 1, dark: 2}[saved];
+        if (idx !== undefined) document.querySelectorAll('.theme-btn')[idx].classList.add('active');
+    }
+    applyTheme();
+    </script>
+</body>
+</html>

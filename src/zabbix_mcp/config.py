@@ -145,12 +145,47 @@ class AdminAIConfig:
 
 
 @dataclass(frozen=True)
+class OAuthConfig:
+    """OAuth 2.1 authorization server settings.
+
+    When `enabled` is True, the MCP server boots an embedded OAuth
+    authorization server that ChatGPT custom apps, Claude Desktop
+    remote connectors, and any MCP 2025-11-25 client can negotiate
+    against -- no external IdP needed. Authorization codes /
+    refresh tokens are held in memory; registered clients persist
+    in `[oauth_clients.<id>]` config sections and survive restart.
+
+    Login uses the existing admin-portal users (scrypt hashes in
+    `[admin.users.*]`); operators do not maintain a second identity
+    store. Issued access tokens are bound by `aud` claim to
+    `[server].public_url` so a leaked token cannot be replayed
+    against a different MCP deployment (RFC 8707).
+    """
+
+    enabled: bool = False
+    # Path on the MCP server where the user-agent is redirected for
+    # the login + consent step of the authorize flow. Must live on
+    # the same origin as the issuer URL (= [server].public_url).
+    login_path: str = "/oauth/login"
+    # When True, any client meeting RFC 7591 may register itself via
+    # POST /register. When False, operators must add clients by hand
+    # (or wait for the admin UI to grow a "register client" button).
+    dynamic_registration_enabled: bool = True
+    # Default scopes assigned to a client that does not list any in
+    # its registration request. Mirrors the legacy bearer default
+    # (full access) so an operator-driven flow does not have to
+    # rediscover the scope catalog.
+    default_scopes: list[str] = field(default_factory=lambda: ["*"])
+
+
+@dataclass(frozen=True)
 class AppConfig:
     """Top-level application configuration."""
 
     server: ServerConfig = field(default_factory=ServerConfig)
     zabbix_servers: dict[str, ZabbixServerConfig] = field(default_factory=dict)
     admin_ai: AdminAIConfig = field(default_factory=AdminAIConfig)
+    oauth: OAuthConfig = field(default_factory=OAuthConfig)
 
     @property
     def default_server(self) -> str | None:
@@ -559,4 +594,23 @@ def load_config(path: str | Path) -> AppConfig:
         timeout=int(ai_raw.get("timeout", 180) or 180),
     )
 
-    return AppConfig(server=server_config, zabbix_servers=zabbix_servers, admin_ai=admin_ai)
+    # Optional [oauth] block for the embedded OAuth 2.1 AS. Missing
+    # section = feature disabled (the legacy bearer-token path stays
+    # active).  When enabled, [server].public_url MUST be set so the
+    # issuer URL on metadata documents is reachable from remote
+    # clients (Claude Desktop, ChatGPT custom apps).
+    oauth_raw = raw.get("oauth", {}) or {}
+    default_scopes_raw = oauth_raw.get("default_scopes", ["*"])
+    if not isinstance(default_scopes_raw, list):
+        default_scopes_raw = ["*"]
+    oauth_cfg = OAuthConfig(
+        enabled=bool(oauth_raw.get("enabled", False)),
+        login_path=str(oauth_raw.get("login_path", "/oauth/login") or "/oauth/login"),
+        dynamic_registration_enabled=bool(oauth_raw.get("dynamic_registration_enabled", True)),
+        default_scopes=[str(s) for s in default_scopes_raw],
+    )
+
+    return AppConfig(
+        server=server_config, zabbix_servers=zabbix_servers,
+        admin_ai=admin_ai, oauth=oauth_cfg,
+    )

@@ -1,0 +1,122 @@
+{#
+  Zabbix MCP Server
+  Copyright (C) 2026 initMAX s.r.o.
+  Licensed under the GNU Affero General Public License v3.
+  See LICENSE for details.
+#}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authorize {{ client_name }} - Zabbix MCP</title>
+    <link rel="stylesheet" href="/static/style.css?v={{ version }}">
+    <style>
+        .oauth-consent {
+            background: var(--color-primary-light);
+            border: 1px solid var(--color-primary);
+            border-radius: var(--radius-md);
+            padding: 12px 14px;
+            margin-bottom: 18px;
+            font-size: 0.85rem;
+            color: var(--text-primary);
+        }
+        .oauth-consent strong { color: var(--text-primary); }
+        .oauth-scopes { margin: 8px 0 0; padding: 0; list-style: none; }
+        .oauth-scopes li {
+            display: inline-block;
+            margin: 3px 4px 0 0;
+            padding: 3px 9px;
+            background: var(--color-primary);
+            color: #ffffff;
+            border-radius: var(--radius-full);
+            font-size: 0.72rem;
+            font-weight: 500;
+        }
+        .oauth-scopes li.muted {
+            background: var(--text-muted);
+        }
+        .oauth-disclaimer {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            text-align: center;
+            margin-top: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-page">
+        <div class="theme-switcher-login">
+            <button class="theme-btn" onclick="setTheme('light')" title="Light mode">&#x2600;&#xFE0F;</button>
+            <button class="theme-btn" onclick="setTheme('auto')" title="Auto (system)">&#x1F5A5;&#xFE0F;</button>
+            <button class="theme-btn" onclick="setTheme('dark')" title="Dark mode">&#x1F319;</button>
+        </div>
+        <div class="login-card">
+            <div class="login-logo">
+                <img src="/static/logo-horizontal-dark.svg" alt="initMAX" class="logo-light-theme" style="height: 48px;">
+                <img src="/static/logo-horizontal-light.svg" alt="initMAX" class="logo-dark-theme" style="height: 48px;">
+            </div>
+            <h1 class="login-title">Authorize MCP Client</h1>
+
+            {% if error %}
+            <div class="login-error">{{ error }}</div>
+            {% endif %}
+
+            <div class="oauth-consent">
+                <strong>{{ client_name }}</strong> is asking to use your operator account.
+                <ul class="oauth-scopes">
+                    {% if scopes %}
+                        {% for s in scopes %}<li>{{ s }}</li>{% endfor %}
+                    {% else %}
+                        <li class="muted">no specific scope</li>
+                    {% endif %}
+                </ul>
+            </div>
+
+            <form method="post" autocomplete="on">
+                <input type="hidden" name="request_id" value="{{ request_id }}">
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" name="username" class="form-input" placeholder="Username" value="{{ username | default('') }}" required autofocus autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input" placeholder="Password" required autocomplete="current-password">
+                </div>
+                <div class="form-group" style="margin-top: 24px;">
+                    <button type="submit" class="btn btn-primary w-full btn-lg">Sign in &amp; allow</button>
+                </div>
+            </form>
+
+            <div class="oauth-disclaimer">By signing in you grant the scopes listed above for one session.</div>
+        </div>
+        <div class="login-footer">
+            <a href="https://www.initmax.com" target="_blank" style="color:inherit; text-decoration:none;">&copy; {{ year }} initMAX s.r.o.</a>
+        </div>
+    </div>
+
+    <script>
+    function setTheme(mode) {
+        localStorage.setItem('theme', mode);
+        applyTheme();
+    }
+    function applyTheme() {
+        var saved = localStorage.getItem('theme') || 'auto';
+        var resolved;
+        if (saved === 'auto') {
+            resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        } else {
+            resolved = saved;
+        }
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.querySelectorAll('.theme-btn').forEach(function(btn) { btn.classList.remove('active'); });
+        var idx = {light: 0, auto: 1, dark: 2}[saved];
+        if (idx !== undefined) document.querySelectorAll('.theme-btn')[idx].classList.add('active');
+    }
+    applyTheme();
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function() {
+        if (localStorage.getItem('theme') === 'auto') applyTheme();
+    });
+    </script>
+</body>
+</html>

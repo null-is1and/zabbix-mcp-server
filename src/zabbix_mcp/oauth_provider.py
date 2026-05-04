@@ -1,0 +1,550 @@
+#
+# Zabbix MCP Server
+# Copyright (C) 2026 initMAX s.r.o.
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+
+"""OAuth 2.1 Authorization Server provider for the MCP server.
+
+Implements the ``OAuthAuthorizationServerProvider`` protocol from the
+MCP framework so that ChatGPT custom apps, Claude Desktop remote
+connectors, and any other MCP 2025-11-25 compliant client can finish
+their handshake against this server without operators having to bolt
+on a separate IdP.
+
+Architecture:
+
+* The MCP server itself is the resource server (RS), the authorization
+  server (AS), and the user identity backend, all in one process.
+  Tokens are opaque (random hex), held in memory; since AS == RS,
+  there is no need for JWT signing or JWKS to bridge a trust boundary.
+* User authentication reuses the admin-portal users (scrypt hashes
+  in ``/etc/zabbix-mcp/config.toml``).  Operators do not maintain a
+  second identity store.
+* Dynamic client registration (RFC 7591) is enabled by default;
+  registered clients persist in ``[oauth_clients.<client_id>]``
+  config sections so they survive a server restart.  Authorization
+  codes (10-min TTL) and refresh tokens are in-memory only.
+* The ``aud`` (resource indicator, RFC 8707) on every issued access
+  token is bound to the canonical MCP URL declared via
+  ``[server].public_url`` -- a token issued for one MCP deployment
+  cannot be replayed against another.
+* The legacy single-token / multi-token bearer mode keeps working:
+  ``load_access_token`` first tries the OAuth-issued token cache and
+  falls back to the existing ``TokenStore`` so a token configured as
+  ``[tokens.<id>]`` can be used as a Bearer credential alongside
+  OAuth tokens.
+
+What it does NOT do (deferred):
+
+* No JWT issuance / JWKS endpoint -- not required while AS == RS.
+  If we later split the AS off the MCP host, swap opaque tokens for
+  RS256 JWTs and add a ``/oauth/jwks.json`` route.
+* No token introspection (RFC 7662) -- ``load_access_token`` is the
+  in-process equivalent; clients never call introspection because the
+  RS is local.
+* No PAR (RFC 9126) -- not required by the MCP 2025-11-25 spec; can
+  be added later if a client needs it.
+"""
+
+from __future__ import annotations
+
+import logging
+import secrets
+import time
+from collections import OrderedDict
+from typing import Any
+from urllib.parse import urlencode
+
+from pydantic import AnyHttpUrl, AnyUrl
+
+from mcp.server.auth.provider import (
+    AccessToken,
+    AuthorizationCode,
+    AuthorizationParams,
+    OAuthAuthorizationServerProvider,
+    RefreshToken,
+    TokenError,
+)
+from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+
+logger = logging.getLogger("zabbix_mcp.oauth")
+
+# ---------------------------------------------------------------------------
+# Lifetimes
+# ---------------------------------------------------------------------------
+
+# Authorization codes are short-lived per OAuth 2.1 §4.1.3.
+_AUTH_CODE_TTL_SECONDS = 600  # 10 minutes
+
+# Default access-token lifetime (1 hour). Refresh-token rotation gives
+# clients a way to extend without forcing the operator to log in again.
+_ACCESS_TOKEN_TTL_SECONDS = 3600
+
+# Refresh tokens last 30 days. Each use rotates to a new refresh token
+# (per OAuth 2.1 public-client requirements).
+_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 3600
+
+# Bound the in-memory tables so a misbehaving / abusive client cannot
+# drive the server out of memory by churning codes or refresh tokens.
+_MAX_LIVE_CODES = 10_000
+_MAX_LIVE_REFRESH_TOKENS = 50_000
+_MAX_LIVE_ACCESS_TOKENS = 50_000
+
+
+def _new_secret(num_bytes: int = 32) -> str:
+    """Cryptographically secure URL-safe token, suitable for codes / tokens."""
+    return secrets.token_urlsafe(num_bytes)
+
+
+class _PendingAuthorization:
+    """Holds an /authorize request that is awaiting user login + consent.
+
+    The framework's authorize handler hands us validated AuthorizationParams
+    and the resolved client; we stash them keyed by an opaque ``request_id``
+    and return a redirect to our login page that carries that request_id.
+    The login completion handler later calls ``complete_pending`` with the
+    same request_id to mint the actual authorization code and redirect
+    the user-agent back to the client's redirect_uri.
+    """
+
+    __slots__ = ("client", "params", "expires_at")
+
+    def __init__(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> None:
+        self.client = client
+        self.params = params
+        self.expires_at = time.time() + _AUTH_CODE_TTL_SECONDS
+
+
+class ZmcpOAuthProvider:
+    """OAuth 2.1 AS+RS for the Zabbix MCP server.
+
+    Methods on this class are awaited by the MCP framework's auth
+    handlers in ``mcp.server.auth.handlers.*`` -- they implement the
+    ``OAuthAuthorizationServerProvider`` Protocol.
+
+    Args:
+        public_url: Canonical https URL the MCP server is reachable on
+            (e.g. ``https://mcp.example.com``).  Used as the issuer for
+            metadata documents and as the ``aud`` value on every issued
+            token.
+        token_store: Existing legacy bearer-token store.  We never write
+            to it; we use it as a fallback in ``load_access_token`` so
+            clients that already authenticate with a static
+            ``[tokens.<id>]`` bearer keep working when OAuth is enabled.
+        login_path: Path on the same host the AS will redirect users to
+            for credential entry, e.g. ``"/oauth/login"``.  The login
+            view receives ``?request_id=...`` and is responsible for
+            calling ``complete_pending`` once the user authenticates.
+        registered_clients_loader: Callable returning a dict mapping
+            ``client_id -> OAuthClientInformationFull``.  Called once at
+            startup; subsequent ``register_client`` calls are persisted
+            via ``register_client_persister``.
+        register_client_persister: Callable that writes a newly
+            registered client back to disk (config.toml).  Receives the
+            full client information.
+    """
+
+    def __init__(
+        self,
+        *,
+        public_url: str,
+        token_store: Any,
+        login_path: str = "/oauth/login",
+        registered_clients_loader: Any = None,
+        register_client_persister: Any = None,
+    ) -> None:
+        self._public_url = public_url.rstrip("/")
+        self._token_store = token_store
+        self._login_path = login_path
+        self._persist_client = register_client_persister
+
+        # client_id -> OAuthClientInformationFull
+        self._clients: dict[str, OAuthClientInformationFull] = {}
+        if registered_clients_loader is not None:
+            try:
+                self._clients = dict(registered_clients_loader() or {})
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Could not load persisted OAuth clients: %s", exc)
+
+        # request_id -> _PendingAuthorization (login-in-flight)
+        self._pending: OrderedDict[str, _PendingAuthorization] = OrderedDict()
+
+        # code -> AuthorizationCode (one-shot, 10-min TTL)
+        self._codes: OrderedDict[str, AuthorizationCode] = OrderedDict()
+
+        # token -> AccessToken (with subject metadata)
+        self._access_tokens: OrderedDict[str, AccessToken] = OrderedDict()
+
+        # refresh -> RefreshToken
+        self._refresh_tokens: OrderedDict[str, RefreshToken] = OrderedDict()
+
+        # access_token -> refresh_token (so revoke cascades)
+        self._access_to_refresh: dict[str, str] = {}
+
+    # ------------------------------------------------------------------
+    # Pending authorization plumbing (called from our /oauth/login view)
+    # ------------------------------------------------------------------
+
+    def stash_pending(self, request_id: str, pending: _PendingAuthorization) -> None:
+        """Cache an in-flight /authorize -- caller is the framework's authorize handler."""
+        self._gc(self._pending, _MAX_LIVE_CODES)
+        self._pending[request_id] = pending
+
+    def take_pending(self, request_id: str) -> _PendingAuthorization | None:
+        """Pop a pending /authorize -- caller is our login completion view."""
+        pending = self._pending.pop(request_id, None)
+        if pending is None:
+            return None
+        if pending.expires_at < time.time():
+            return None
+        return pending
+
+    def complete_pending(
+        self,
+        request_id: str,
+        granted_scopes: list[str],
+        subject: str,
+    ) -> str | None:
+        """Finalize a logged-in user's consent; mint a code, return the redirect URL.
+
+        Args:
+            request_id: Token returned to the login view in ``?request_id=``.
+            granted_scopes: Scopes the user actually consented to (subset of
+                what the client asked for).
+            subject: Username / token id of the authenticated user; embedded
+                in issued access tokens so request handlers can attribute
+                tool calls back to the operator.
+
+        Returns:
+            The full client redirect URL with ``code`` and ``state``
+            query params, or ``None`` if the request_id was unknown
+            or expired (caller renders an error).
+        """
+        pending = self.take_pending(request_id)
+        if pending is None:
+            return None
+
+        code_str = _new_secret(32)
+        code = AuthorizationCode(
+            code=code_str,
+            scopes=list(granted_scopes),
+            expires_at=time.time() + _AUTH_CODE_TTL_SECONDS,
+            client_id=str(pending.client.client_id or ""),
+            code_challenge=pending.params.code_challenge,
+            redirect_uri=pending.params.redirect_uri,
+            redirect_uri_provided_explicitly=pending.params.redirect_uri_provided_explicitly,
+            resource=pending.params.resource,
+        )
+        # Park the authenticated subject so exchange_authorization_code
+        # can carry it onto the access token.
+        object.__setattr__(code, "_subject", subject)  # type: ignore[arg-type]
+        self._gc(self._codes, _MAX_LIVE_CODES)
+        self._codes[code_str] = code
+
+        params: dict[str, str] = {"code": code_str}
+        if pending.params.state is not None:
+            params["state"] = pending.params.state
+        sep = "&" if "?" in str(pending.params.redirect_uri) else "?"
+        return f"{pending.params.redirect_uri}{sep}{urlencode(params)}"
+
+    # ------------------------------------------------------------------
+    # OAuthAuthorizationServerProvider protocol implementation
+    # ------------------------------------------------------------------
+
+    async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
+        return self._clients.get(client_id)
+
+    async def register_client(self, client_info: OAuthClientInformationFull) -> None:
+        # Mint client_id if the client did not pre-supply one (RFC 7591 §3.2.1).
+        if not client_info.client_id:
+            client_info.client_id = _new_secret(16)
+        # Public PKCE clients (e.g. Claude Desktop, ChatGPT browser flow)
+        # do NOT get a client_secret. A confidential client is granted a
+        # secret only when it asked for non-"none" auth.
+        if (
+            client_info.token_endpoint_auth_method
+            and client_info.token_endpoint_auth_method != "none"
+            and not client_info.client_secret
+        ):
+            client_info.client_secret = _new_secret(32)
+        client_info.client_id_issued_at = int(time.time())
+        self._clients[client_info.client_id] = client_info
+        if self._persist_client is not None:
+            try:
+                self._persist_client(client_info)
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Could not persist OAuth client %s: %s", client_info.client_id, exc)
+        logger.info(
+            "OAuth client registered: id=%s name=%r redirect_uris=%s",
+            client_info.client_id,
+            client_info.client_name,
+            [str(u) for u in (client_info.redirect_uris or [])],
+        )
+
+    async def authorize(
+        self,
+        client: OAuthClientInformationFull,
+        params: AuthorizationParams,
+    ) -> str:
+        """Hand the user-agent off to our login form; framework redirects them."""
+        request_id = _new_secret(24)
+        self.stash_pending(request_id, _PendingAuthorization(client, params))
+        return f"{self._public_url}{self._login_path}?request_id={request_id}"
+
+    async def load_authorization_code(
+        self,
+        client: OAuthClientInformationFull,
+        authorization_code: str,
+    ) -> AuthorizationCode | None:
+        code = self._codes.get(authorization_code)
+        if code is None:
+            return None
+        if code.client_id != (client.client_id or ""):
+            return None
+        if code.expires_at < time.time():
+            self._codes.pop(authorization_code, None)
+            return None
+        return code
+
+    async def exchange_authorization_code(
+        self,
+        client: OAuthClientInformationFull,
+        authorization_code: AuthorizationCode,
+    ) -> OAuthToken:
+        # One-shot: code is consumed even on the happy path.
+        self._codes.pop(authorization_code.code, None)
+        subject = getattr(authorization_code, "_subject", "anonymous")
+        return self._mint_token_pair(
+            client_id=str(client.client_id or ""),
+            scopes=list(authorization_code.scopes),
+            subject=str(subject),
+            resource=authorization_code.resource,
+        )
+
+    async def load_refresh_token(
+        self,
+        client: OAuthClientInformationFull,
+        refresh_token: str,
+    ) -> RefreshToken | None:
+        rt = self._refresh_tokens.get(refresh_token)
+        if rt is None:
+            return None
+        if rt.client_id != (client.client_id or ""):
+            return None
+        if rt.expires_at and rt.expires_at < int(time.time()):
+            self._refresh_tokens.pop(refresh_token, None)
+            return None
+        return rt
+
+    async def exchange_refresh_token(
+        self,
+        client: OAuthClientInformationFull,
+        refresh_token: RefreshToken,
+        scopes: list[str],
+    ) -> OAuthToken:
+        # Per OAuth 2.1 §4.3.1, rotate the refresh token; reject any scope
+        # the client did not originally hold.
+        for s in scopes or []:
+            if s not in refresh_token.scopes:
+                raise TokenError("invalid_scope", f"scope '{s}' was not in the original grant")
+        self._refresh_tokens.pop(refresh_token.token, None)
+        # Inherit subject from the previous access token for this refresh,
+        # if we still have it; otherwise mark anonymous (the user logged
+        # in long enough ago that the AT expired).
+        subject = "anonymous"
+        for at_str, at in list(self._access_tokens.items()):
+            if self._access_to_refresh.get(at_str) == refresh_token.token:
+                subject = getattr(at, "_subject", "anonymous")
+                break
+        new_scopes = list(scopes or refresh_token.scopes)
+        return self._mint_token_pair(
+            client_id=refresh_token.client_id,
+            scopes=new_scopes,
+            subject=str(subject),
+            resource=None,
+        )
+
+    async def load_access_token(self, token: str) -> AccessToken | None:
+        # 1. OAuth-issued tokens
+        at = self._access_tokens.get(token)
+        if at is not None:
+            if at.expires_at and at.expires_at < int(time.time()):
+                self._access_tokens.pop(token, None)
+                return None
+            # Audience binding (RFC 8707 §2): refuse a token issued for
+            # a different MCP deployment.
+            if at.resource and not _audience_matches(at.resource, self._public_url):
+                logger.warning(
+                    "Rejected access token: aud=%s does not match this MCP server (%s)",
+                    at.resource, self._public_url,
+                )
+                return None
+            self._publish_token_to_contextvar(
+                token=token,
+                client_id=at.client_id,
+                scopes=list(at.scopes),
+                subject=str(getattr(at, "_subject", "anonymous")),
+                read_only=False,
+                source="oauth",
+            )
+            return at
+
+        # 2. Legacy bearer fallback - existing config.toml [tokens.X] entries
+        ts = self._token_store
+        if ts is None:
+            return None
+        try:
+            verify = ts.verify
+        except AttributeError:
+            return None
+        # Read client IP from contextvar so legacy IP allowlists are honored
+        # exactly like the original MultiTokenVerifier did.
+        from zabbix_mcp.token_store import current_client_ip, current_token_info
+        info = verify(token, client_ip=current_client_ip.get())
+        if info is None or info.revoked:
+            return None
+        current_token_info.set(info)  # parity with MultiTokenVerifier.verify_token
+        scopes = list(info.scopes) if info.scopes else ["*"]
+        bridged = AccessToken(
+            token=token,
+            client_id=f"legacy:{info.id}",
+            scopes=scopes,
+            expires_at=None,
+            resource=self._public_url,
+        )
+        return bridged
+
+    def _publish_token_to_contextvar(
+        self,
+        *,
+        token: str,
+        client_id: str,
+        scopes: list[str],
+        subject: str,
+        read_only: bool,
+        source: str,
+    ) -> None:
+        """Bridge an OAuth AccessToken into the legacy ``TokenInfo`` contextvar.
+
+        The downstream tool dispatcher (``_make_tool_handler``) reads
+        ``current_token_info`` via ``check_token_authorization`` to enforce
+        server-binding, scope, and read-only restrictions.  Without this
+        bridge, OAuth-authenticated requests would skip those checks entirely
+        because the contextvar would still be ``None``.
+        """
+        from zabbix_mcp.token_store import current_token_info, TokenInfo
+        info = TokenInfo(
+            id=f"{source}:{client_id}",
+            name=f"{source}:{client_id}:{subject}",
+            token_hash="",  # OAuth tokens are opaque, no hash bookkeeping
+            token_prefix="",
+            scopes=scopes,
+            read_only=read_only,
+            allowed_ips=None,  # OAuth tokens are not bound to client IPs
+            allowed_servers=["*"],
+            expires_at=None,
+            is_legacy=False,
+            revoked=False,
+        )
+        current_token_info.set(info)
+
+    async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
+        # Revoke the access + refresh together regardless of which arrived.
+        if isinstance(token, AccessToken):
+            access_str = token.token
+            refresh_str = self._access_to_refresh.pop(access_str, None)
+        else:
+            refresh_str = token.token
+            access_str = None
+            for a, r in list(self._access_to_refresh.items()):
+                if r == refresh_str:
+                    access_str = a
+                    break
+            if access_str is not None:
+                self._access_to_refresh.pop(access_str, None)
+        if access_str is not None:
+            self._access_tokens.pop(access_str, None)
+        if refresh_str is not None:
+            self._refresh_tokens.pop(refresh_str, None)
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _mint_token_pair(
+        self,
+        *,
+        client_id: str,
+        scopes: list[str],
+        subject: str,
+        resource: str | None,
+    ) -> OAuthToken:
+        now = int(time.time())
+        access_str = _new_secret(32)
+        refresh_str = _new_secret(32)
+        access = AccessToken(
+            token=access_str,
+            client_id=client_id,
+            scopes=scopes,
+            expires_at=now + _ACCESS_TOKEN_TTL_SECONDS,
+            resource=resource or self._public_url,
+        )
+        # Carry subject for downstream auth checks; not part of the
+        # OAuth wire model so we attach it as a private attribute.
+        object.__setattr__(access, "_subject", subject)  # type: ignore[arg-type]
+        refresh = RefreshToken(
+            token=refresh_str,
+            client_id=client_id,
+            scopes=scopes,
+            expires_at=now + _REFRESH_TOKEN_TTL_SECONDS,
+        )
+        self._gc(self._access_tokens, _MAX_LIVE_ACCESS_TOKENS)
+        self._gc(self._refresh_tokens, _MAX_LIVE_REFRESH_TOKENS)
+        self._access_tokens[access_str] = access
+        self._refresh_tokens[refresh_str] = refresh
+        self._access_to_refresh[access_str] = refresh_str
+
+        return OAuthToken(
+            access_token=access_str,
+            token_type="Bearer",
+            expires_in=_ACCESS_TOKEN_TTL_SECONDS,
+            refresh_token=refresh_str,
+            scope=" ".join(scopes) if scopes else None,
+        )
+
+    @staticmethod
+    def _gc(table: OrderedDict, limit: int) -> None:
+        """Bound an in-memory table by evicting the oldest entries when full."""
+        while len(table) >= limit:
+            try:
+                table.popitem(last=False)
+            except KeyError:
+                return
+
+
+def _audience_matches(aud: str, expected: str) -> bool:
+    """RFC 8707 §2 audience matching.
+
+    Compares scheme+host+port (the canonical resource identity);
+    accepts an extra path on the token's audience as long as it is
+    a prefix of, or equal to, the expected URL.
+    """
+    if aud == expected:
+        return True
+    a = aud.rstrip("/")
+    e = expected.rstrip("/")
+    if a == e:
+        return True
+    return a.startswith(e + "/")

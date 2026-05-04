@@ -2331,7 +2331,12 @@ def run_server(
 
     # Set up bearer token auth for HTTP transport
     auth_kwargs: dict[str, Any] = {}
-    has_auth = token_store.token_count > 0 or config.server.auth_token
+    oauth_provider = None  # set below when [oauth].enabled
+    has_auth = (
+        token_store.token_count > 0
+        or config.server.auth_token
+        or config.oauth.enabled
+    )
     if has_auth and transport in ("http", "sse"):
         # Prefer the operator's explicit public URL when set (deployments
         # behind a reverse proxy, NAT, or with the bind host = 0.0.0.0).
@@ -2340,30 +2345,116 @@ def run_server(
         # reach - reported in discussion #19.
         public_url = (getattr(config.server, "public_url", "") or "").rstrip("/")
         server_url = public_url or f"{scheme}://{host}:{port}"
-        if token_store.token_count > 0:
-            auth_kwargs["token_verifier"] = MultiTokenVerifier(token_store)
-        else:
-            auth_kwargs["token_verifier"] = _BearerTokenVerifier(config.server.auth_token)
-        auth_kwargs["auth"] = AuthSettings(
-            issuer_url=server_url,
-            resource_server_url=server_url,
-        )
-        if public_url:
+
+        if config.oauth.enabled:
+            from zabbix_mcp.oauth_provider import ZmcpOAuthProvider
+            from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+
+            cfg_path_for_oauth = getattr(config, "_config_path", None)
+
+            def _load_clients() -> dict[str, Any]:
+                """Hydrate the in-memory client table from [oauth_clients.*]."""
+                from mcp.shared.auth import OAuthClientInformationFull
+                if not cfg_path_for_oauth:
+                    return {}
+                try:
+                    doc = load_config_document(cfg_path_for_oauth)
+                except Exception:
+                    return {}
+                raw = doc.get("oauth_clients", {}) or {}
+                out: dict[str, Any] = {}
+                for cid, body in raw.items():
+                    try:
+                        out[cid] = OAuthClientInformationFull.model_validate(dict(body))
+                    except Exception as exc:
+                        logger.warning("Skipping malformed [oauth_clients.%s]: %s", cid, exc)
+                return out
+
+            def _persist_client(client_info: Any) -> None:
+                """Write a newly-registered client back to config.toml."""
+                if not cfg_path_for_oauth:
+                    return
+                from zabbix_mcp.admin.config_writer import add_config_table
+                # OAuthClientInformationFull -> serializable dict
+                body = client_info.model_dump(mode="json", exclude_none=True)
+                # Tomlkit cannot store None; ensure no nulls slipped in.
+                body = {k: v for k, v in body.items() if v is not None}
+                try:
+                    add_config_table(cfg_path_for_oauth, "oauth_clients",
+                                     str(client_info.client_id), body)
+                except ValueError:
+                    # Already registered: update in place via sub-table replace.
+                    from zabbix_mcp.admin.config_writer import (
+                        load_config_document, save_config_document,
+                    )
+                    doc = load_config_document(cfg_path_for_oauth)
+                    import tomlkit
+                    if "oauth_clients" not in doc:
+                        doc.add("oauth_clients", tomlkit.table(is_super_table=True))
+                    sub = tomlkit.table()
+                    for k, v in body.items():
+                        sub.add(k, v)
+                    doc["oauth_clients"][str(client_info.client_id)] = sub
+                    save_config_document(cfg_path_for_oauth, doc)
+
+            oauth_provider = ZmcpOAuthProvider(
+                public_url=server_url,
+                token_store=token_store,
+                login_path=config.oauth.login_path,
+                registered_clients_loader=_load_clients,
+                register_client_persister=_persist_client,
+            )
+            auth_kwargs["auth_server_provider"] = oauth_provider
+            auth_kwargs["auth"] = AuthSettings(
+                issuer_url=server_url,
+                resource_server_url=server_url,
+                client_registration_options=ClientRegistrationOptions(
+                    enabled=config.oauth.dynamic_registration_enabled,
+                    valid_scopes=None,
+                    default_scopes=list(config.oauth.default_scopes),
+                ),
+                revocation_options=RevocationOptions(enabled=True),
+            )
+            if not public_url:
+                logger.warning(
+                    "[oauth].enabled is true but [server].public_url is not set. "
+                    "OAuth metadata will advertise '%s' which most remote MCP "
+                    "clients (Claude Desktop, ChatGPT custom apps) will not be "
+                    "able to reach. Set public_url to the externally-reachable "
+                    "https URL (e.g. \"https://mcp.example.com\").",
+                    server_url,
+                )
             logger.info(
-                "MCP auth_token: bearer token authentication enabled (advertising %s "
-                "from [server].public_url override)",
-                server_url,
+                "MCP auth: OAuth 2.1 authorization server enabled (issuer %s, "
+                "login at %s, dynamic registration: %s)",
+                server_url, config.oauth.login_path,
+                "yes" if config.oauth.dynamic_registration_enabled else "no",
             )
         else:
-            logger.info("MCP auth_token: bearer token authentication enabled")
-            if host in ("0.0.0.0", "::"):
-                logger.warning(
-                    "Bind host is %s but [server].public_url is not set - OAuth "
-                    "discovery will advertise '%s' which remote MCP clients "
-                    "cannot reach. Set public_url to the externally-reachable "
-                    "URL (e.g. \"https://mcp.example.com:8080\").",
-                    host, server_url,
+            if token_store.token_count > 0:
+                auth_kwargs["token_verifier"] = MultiTokenVerifier(token_store)
+            else:
+                auth_kwargs["token_verifier"] = _BearerTokenVerifier(config.server.auth_token)
+            auth_kwargs["auth"] = AuthSettings(
+                issuer_url=server_url,
+                resource_server_url=server_url,
+            )
+            if public_url:
+                logger.info(
+                    "MCP auth_token: bearer token authentication enabled (advertising %s "
+                    "from [server].public_url override)",
+                    server_url,
                 )
+            else:
+                logger.info("MCP auth_token: bearer token authentication enabled")
+                if host in ("0.0.0.0", "::"):
+                    logger.warning(
+                        "Bind host is %s but [server].public_url is not set - OAuth "
+                        "discovery will advertise '%s' which remote MCP clients "
+                        "cannot reach. Set public_url to the externally-reachable "
+                        "URL (e.g. \"https://mcp.example.com:8080\").",
+                        host, server_url,
+                    )
     elif transport in ("http", "sse") and not config.server.auth_token:
         if host == "127.0.0.1":
             logger.info(
@@ -2634,6 +2725,38 @@ def run_server(
         async def http_health(request: Request) -> JSONResponse:
             return JSONResponse({"status": "ok"})
 
+        # OAuth login + consent UI - only registered when [oauth].enabled.
+        # Lives on the MCP port (same origin as the issuer URL) so the
+        # browser does not have to deal with cross-origin cookies during
+        # the authorize redirect dance.  The login page reuses the admin
+        # portal's templates + ``static/style.css`` so the surface looks
+        # identical to the portal's own login screen; we mount the same
+        # static directory at ``/static/`` on the MCP port for that.
+        if oauth_provider is not None:
+            from pathlib import Path
+            from starlette.responses import HTMLResponse, RedirectResponse, FileResponse
+            from zabbix_mcp.oauth_login import handle_oauth_login
+
+            login_path = config.oauth.login_path
+            _admin_static_dir = Path(__file__).parent / "admin" / "static"
+
+            @mcp.custom_route(login_path, methods=["GET", "POST"])
+            async def http_oauth_login(request: Request):
+                return await handle_oauth_login(
+                    request, oauth_provider, config,
+                )
+
+            @mcp.custom_route("/static/{filename:path}", methods=["GET"])
+            async def http_oauth_static(request: Request):
+                # Serve admin portal assets (style.css, logo*.svg, ...) from
+                # the MCP port so the OAuth login HTML can pull them via a
+                # same-origin ``/static/...`` reference.  Path traversal is
+                # blocked by ``Path.resolve().is_relative_to()``.
+                fname = request.path_params.get("filename", "")
+                target = (_admin_static_dir / fname).resolve()
+                if not target.is_file() or not str(target).startswith(str(_admin_static_dir.resolve())):
+                    return JSONResponse({"error": "not found"}, status_code=404)
+                return FileResponse(str(target))
 
     try:
         if transport in ("http", "sse"):

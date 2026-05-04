@@ -266,6 +266,20 @@ auth_token = "your-secret-token-here"
 
 When no tokens are configured, the server accepts unauthenticated connections. This is safe when bound to `127.0.0.1` (default) but **must be configured** when exposed to the network (`0.0.0.0`).
 
+**OAuth 2.1** (v1.28+) — for clients that auto-discover authentication (ChatGPT custom apps, Claude Desktop remote, MCP Inspector). Enable with:
+
+```toml
+[server]
+public_url = "https://mcp.example.com"  # required when OAuth is on
+
+[oauth]
+enabled = true
+```
+
+Login uses the existing admin-portal users. Dynamic client registration (RFC 7591) is on by default; ChatGPT's "Advanced OAuth settings" auto-detects everything from the `.well-known/...` discovery documents. The legacy `[tokens.X]` bearer mode keeps working alongside OAuth - existing CLI scripts and workflow tools need no change.
+
+Full setup, security checklist, and troubleshooting in [`docs/OAUTH.md`](docs/OAUTH.md).
+
 #### Multiple Zabbix servers
 
 You can connect to multiple Zabbix instances. Each tool has a `server` parameter to select which one to use (defaults to the first defined):

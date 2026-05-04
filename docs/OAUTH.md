@@ -1,0 +1,274 @@
+# OAuth 2.1 authentication
+
+`v1.28+` ships an embedded OAuth 2.1 authorization server so MCP clients
+that auto-discover authentication (ChatGPT custom apps, Claude Desktop
+remote connectors, MCP Inspector, ...) can finish their handshake
+without an external IdP. The MCP server is the resource server, the
+authorization server, and the user identity backend, all in one
+process. Tokens are opaque, held in memory; users authenticate against
+the existing admin-portal accounts (`[admin.users.*]`).
+
+The legacy bearer-token mode (`[tokens.X]`) keeps working alongside
+OAuth - clients that already authenticate with a static token need no
+change.
+
+## When to enable OAuth
+
+Turn it on when:
+
+- You want to expose the MCP server to **ChatGPT custom apps** via the
+  "New App" dialog. ChatGPT's "Advanced OAuth settings" auto-detects
+  this server's OAuth metadata and runs the full authorize / consent
+  flow without the operator copying any client_id / client_secret.
+- You want to expose the MCP server to **Claude Desktop remote**,
+  **MCP Inspector**, or any other MCP 2025-11-25 client that supports
+  OAuth.
+- Multiple operators share the deployment and you want each tool
+  call attributed back to a named account, not a shared bearer.
+
+If you only access the server from a single CLI / script /
+workflow tool (n8n, your own Python automation), stick with
+`[tokens.X]` - it is simpler and the wire cost is one HTTP header
+instead of an OAuth round-trip per session.
+
+## Do I need a TLS certificate?
+
+**Yes for production, no for localhost.**
+
+OAuth 2.1 (and RFC 8414) mandate HTTPS for the issuer URL. The MCP
+framework enforces this at startup - if `public_url` is not HTTPS and
+the host is not `localhost` / `127.0.0.1`, the server refuses to boot
+the OAuth routes.
+
+| `public_url` | Allowed? | Use for |
+|---|---|---|
+| `http://localhost:8080` | yes | local development |
+| `http://127.0.0.1:8080` | yes | local development |
+| `http://192.168.x.y` | NO | rejected at startup |
+| `http://mcp.example.com` | NO | rejected at startup |
+| `https://mcp.example.com` | yes | production |
+
+For production you have two equally good options:
+
+1. **Native TLS in the MCP server.** Set `tls_cert_file` and
+   `tls_key_file` in `[server]`. The server terminates TLS itself
+   and the issuer URL points at the same port:
+
+   ```toml
+   [server]
+   public_url = "https://mcp.example.com"
+   tls_cert_file = "/etc/zabbix-mcp/tls/fullchain.pem"
+   tls_key_file = "/etc/zabbix-mcp/tls/privkey.pem"
+   ```
+
+2. **Reverse proxy in front of MCP** (Caddy, nginx, Cloudflare).
+   The MCP server listens HTTP on loopback; the proxy terminates
+   TLS and forwards. This is what most production deployments use
+   because Caddy and Cloudflare provision Let's Encrypt
+   automatically.
+
+   ```toml
+   [server]
+   host = "127.0.0.1"
+   port = 8080
+   public_url = "https://mcp.example.com"
+   trusted_proxies = ["127.0.0.1"]
+   ```
+
+   Caddy snippet:
+
+   ```caddy
+   mcp.example.com {
+     reverse_proxy 127.0.0.1:8080
+   }
+   ```
+
+Either way, hit `https://mcp.example.com/.well-known/oauth-authorization-server`
+from a browser - if you get JSON with HTTP 200, ChatGPT and Claude
+Desktop will be able to discover the server.
+
+## Enable it
+
+In `config.toml`:
+
+```toml
+[server]
+# REQUIRED when OAuth is enabled - this is the URL ChatGPT / Claude
+# will be redirected to during authorize. Must be HTTPS unless host
+# is localhost / 127.0.0.1 (see "Do I need a TLS certificate?" above).
+public_url = "https://mcp.example.com"
+
+[oauth]
+enabled = true
+# Optional. Defaults shown.
+login_path = "/oauth/login"
+dynamic_registration_enabled = true
+default_scopes = ["*"]
+```
+
+Restart the MCP server. The startup log shows:
+
+```
+MCP auth: OAuth 2.1 authorization server enabled (issuer https://mcp.example.com,
+login at /oauth/login, dynamic registration: yes)
+```
+
+That is enough. No keypair, no IdP, no extra service.
+
+## What it exposes
+
+| Endpoint | Standard | Purpose |
+|---|---|---|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 | Auth server metadata (endpoints, PKCE methods, grants) |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728 | Resource server metadata (issuer pointer, scopes) |
+| `POST /register` | RFC 7591 | Dynamic client registration (off if `dynamic_registration_enabled = false`) |
+| `GET /authorize`, `POST /authorize` | OAuth 2.1 | Start the authorize flow; redirects user-agent to `/oauth/login` |
+| `POST /token` | OAuth 2.1 | Exchange code or refresh token for access token |
+| `POST /revoke` | RFC 7009 | Revoke an access or refresh token |
+| `GET /oauth/login`, `POST /oauth/login` | this server | Operator login + consent screen |
+
+The 401 response on the MCP endpoint includes an
+`WWW-Authenticate: Bearer ... resource_metadata="..."` header so
+clients can discover the AS without prior configuration.
+
+## Flow
+
+```
+ChatGPT / Claude Desktop                      MCP server
+========================                      ==========
+
+POST /mcp                  -->                401 + WWW-Authenticate
+                                              (resource_metadata="...")
+GET .well-known/...        -->                JSON: authorization_servers=[...]
+GET /.well-known/oauth-..  -->                JSON: authorize / token / register
+POST /register             -->                {"client_id": "..."}
+GET /authorize?...&PKCE    -->                302 to /oauth/login?request_id=...
+                                              [user logs in, clicks "Sign in & allow"]
+                                              302 to <client redirect_uri>?code=...
+POST /token (code+verifier)-->                {"access_token": "...", "refresh_token": "..."}
+POST /mcp + Bearer         -->                MCP response
+```
+
+## Authentication
+
+Login uses the existing **admin-portal user table** (`[admin.users.*]`
+in `config.toml`, scrypt-hashed). Operators do not maintain a second
+identity store. If you have an admin user `tomas`, that is the
+username they type into ChatGPT's login screen.
+
+Failed logins return HTTP 401 with the form re-rendered. The login
+view does not implement rate limiting on its own - the existing
+`[server].rate_limit` and the admin portal's POST rate limit cover
+brute-force at the transport layer.
+
+## Token binding (RFC 8707)
+
+Every access token issued by this server has its `aud` (resource
+indicator) field bound to `[server].public_url`. The MCP server
+rejects any token whose `aud` does not match this deployment's
+canonical URL. A token issued for `https://mcp.alpha.com` cannot be
+replayed against `https://mcp.beta.com` even if both servers share
+their token-store key material.
+
+## Scope catalog
+
+OAuth scopes map 1:1 to the existing `[tokens.X].scopes` system:
+
+| Scope | What the token can call |
+|---|---|
+| `*` | every tool (default) |
+| `monitoring` | `host_*`, `hostgroup_*`, `item_*`, `trigger_*`, `problem_*`, `event_*`, `history_*`, `trend_*`, `graph_*`, `discoveryrule_*`, ... |
+| `data_collection` | `template_*`, `templategroup_*`, `valuemap_*`, `dashboard_*` |
+| `alerts` | `action_*`, `alert_*`, `mediatype_*`, `script_*` |
+| `users` | `user_*`, `usergroup_*`, `role_*`, `mfa_*` |
+| `administration` | `settings_*`, `housekeeping_*`, `proxy_*`, `auditlog_*`, ... |
+| `extensions` | `graph_render`, `report_generate`, `problem_active_get`, `health_check`, ... |
+
+Individual tool prefixes also work as scopes; e.g. a client granted
+`scopes = ["host", "graph_render"]` sees only `host_*` and
+`graph_render` in `tools/list` (#38) and is denied any other tool
+at runtime.
+
+## Persistence
+
+| What | Where |
+|---|---|
+| Registered clients | `[oauth_clients.<client_id>]` sections in `config.toml` (survive restart) |
+| Authorization codes | in-memory, 10-minute TTL |
+| Access tokens | in-memory, 1-hour TTL |
+| Refresh tokens | in-memory, 30-day TTL, rotated on each use |
+
+Authorization codes and tokens vanish on server restart. That is by
+design - any in-flight session re-authorizes via the MCP client's
+auto-refresh logic; clients without refresh just trigger a fresh
+login. Refresh tokens are rotated per OAuth 2.1 §4.3.1.
+
+## Disabling OAuth
+
+Set `enabled = false` in `[oauth]` (or remove the section). The
+server falls back to legacy bearer auth (`[tokens.X]`) on the next
+restart. Existing registered clients in `[oauth_clients.*]` stay in
+the config but are not advertised; remove them by hand if you want a
+clean slate.
+
+## Security checklist
+
+- `[server].public_url` MUST be HTTPS in production. The framework
+  refuses to issue tokens for an HTTP issuer URL outside `localhost`.
+- Place the MCP server behind a reverse proxy (nginx, Caddy) that
+  terminates TLS and forwards to MCP over loopback. Configure
+  `[server].trusted_proxies` so the client IP sent to the OAuth login
+  reflects the real caller, not the proxy.
+- `dynamic_registration_enabled = false` if you do not want random
+  callers registering clients against your server. With the flag off,
+  the operator must add `[oauth_clients.<id>]` entries by hand.
+- Restrict `allowed_hosts` and `allowed_origins` to the legitimate
+  client networks. The MCP server already does this for the `/mcp`
+  endpoint; the OAuth endpoints inherit the same allowlist.
+- Audit `[oauth_clients.*]` periodically and remove stale entries.
+  Each entry is a third-party client that can prompt operators for
+  a login.
+
+## Troubleshooting
+
+**ChatGPT shows "OAuth discovery failed"**
+
+The "Advanced OAuth settings" panel needs to reach
+`<public_url>/.well-known/oauth-authorization-server` and
+`<public_url>/.well-known/oauth-protected-resource`. Hit both URLs
+from a browser; both must return JSON with HTTP 200.
+
+If `public_url` is not set, the metadata documents advertise the
+literal bind host (e.g. `http://0.0.0.0:8080`) which is not reachable
+from ChatGPT's side. Set `public_url` to the externally-visible URL.
+
+**Login redirects to `/oauth/login` then says "expired"**
+
+Authorization codes have a 10-minute TTL. If the user took longer than
+that to type their password, the request_id has been evicted. Tell
+them to start the connection from ChatGPT again - that issues a fresh
+authorize request.
+
+**`401 Unauthorized` on `/mcp` despite a successful login**
+
+Check the access token's `aud` claim against `[server].public_url`.
+A common cause is `public_url = "https://example.com"` in config but
+the client sees the server at `https://example.com:8080` because of a
+reverse proxy mismatch. Set the canonical URL in `public_url` to the
+exact form clients use.
+
+**Client metadata for an existing registration changed**
+
+Update the corresponding `[oauth_clients.<id>]` section in
+`config.toml` and restart the MCP server. The provider re-loads the
+table on boot.
+
+## Reference
+
+- [OAuth 2.1 draft](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13)
+- [RFC 7591 - Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591)
+- [RFC 8414 - Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414)
+- [RFC 8707 - Resource Indicators](https://datatracker.ietf.org/doc/html/rfc8707)
+- [RFC 9728 - Protected Resource Metadata](https://datatracker.ietf.org/doc/html/rfc9728)
+- [MCP 2025-11-25 Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+- [OpenAI Apps SDK - Authentication](https://developers.openai.com/apps-sdk/build/auth)
