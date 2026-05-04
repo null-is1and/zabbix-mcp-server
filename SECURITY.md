@@ -104,11 +104,11 @@ When `public_url`, `allowed_origins`, and `allowed_hosts` are all unset on a non
 
 | Version | Supported |
 |---|---|
-| 1.26 (latest) | Yes |
+| 1.27 (latest) | Yes |
+| 1.26 | Yes |
 | 1.25 | Yes |
 | 1.24 | Yes |
 | 1.23 | Yes |
 | 1.22 | Yes |
 | 1.21 | Yes |
-| 1.20 | Yes |
-| < 1.20 | No |
+| < 1.21 | No |
