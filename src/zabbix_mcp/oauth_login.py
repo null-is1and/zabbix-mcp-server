@@ -432,6 +432,11 @@ def _handle_consent_step(
         return _render_error_page("Unrecognised consent action.")
 
     granted = [str(s) for s in form.getlist("scope")] if hasattr(form, "getlist") else []
+    # Wildcard subsumes the concrete groups - if both are posted, drop
+    # the redundant rows so the audit log shows the actual grant
+    # ("scopes=['*']") instead of a confusing super-set.
+    if "*" in granted:
+        granted = ["*"]
     if not granted:
         # The operator unticked everything -- treat as a deny since an
         # empty grant is functionally useless and likely an accident.

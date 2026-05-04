@@ -41,6 +41,11 @@
         .consent-scope-row.wildcard { background: var(--color-warning-light); border-color: var(--color-warning); }
         .consent-scope-row.disabled { opacity: 0.5; cursor: not-allowed; }
         .consent-scope-row.disabled:hover { background: var(--bg-input); }
+        .consent-scope-row.superseded {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .consent-scope-row.superseded:hover { background: var(--bg-input); }
         .consent-scope-row input[type=checkbox] {
             width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-primary);
         }
@@ -107,8 +112,14 @@
                 <input type="hidden" name="step" value="consent">
 
                 {% for scope in scopes %}
-                <label class="consent-scope-row{% if scope.id == '*' %} wildcard{% endif %}{% if scope.disabled %} disabled{% endif %}">
-                    <input type="checkbox" name="scope" value="{{ scope.id }}" {% if scope.checked %}checked{% endif %} {% if scope.disabled %}disabled{% endif %}>
+                <label class="consent-scope-row{% if scope.id == '*' %} wildcard{% endif %}{% if scope.disabled %} disabled{% endif %}{% if scope.id != '*' %} narrow-scope{% endif %}">
+                    <input type="checkbox"
+                           name="scope"
+                           value="{{ scope.id }}"
+                           {% if scope.checked %}checked{% endif %}
+                           {% if scope.disabled %}disabled{% endif %}
+                           {% if scope.id == '*' %}data-wildcard="1"{% else %}data-narrow="1"{% endif %}
+                           onchange="syncWildcardExclusivity()">
                     <div class="consent-scope-meta">
                         <div class="consent-scope-name">{{ scope.label }}</div>
                         <div class="consent-scope-desc">{{ scope.description }}</div>
@@ -135,6 +146,37 @@
     </div>
 
     <script>
+    // Wildcard `*` and the six concrete groups are mutually exclusive.
+    // When * is ticked, the concrete groups are dimmed + disabled (and
+    // unchecked); when * is unticked, they re-enable so the operator can
+    // pick a narrower combination.  Server-side cap reapplies after
+    // submit, so a viewer cannot bypass the disabled state by editing
+    // the form locally.
+    function syncWildcardExclusivity() {
+        var wildcard = document.querySelector('input[data-wildcard]');
+        if (!wildcard) return;
+        var wildcardOn = wildcard.checked;
+        document.querySelectorAll('input[data-narrow]').forEach(function(box) {
+            // Never re-enable a box the server already disabled (role cap).
+            if (box.dataset.serverDisabled === '1') return;
+            if (wildcardOn) {
+                box.checked = false;
+                box.disabled = true;
+            } else {
+                box.disabled = false;
+            }
+            // Visual: dim the row when wildcard is dominant.
+            var row = box.closest('.consent-scope-row');
+            if (row) row.classList.toggle('superseded', wildcardOn);
+        });
+    }
+    // Capture initial server-side disabled state so subsequent toggles
+    // respect role cap.
+    document.querySelectorAll('input[data-narrow]').forEach(function(box) {
+        if (box.disabled) box.dataset.serverDisabled = '1';
+    });
+    syncWildcardExclusivity();
+
     function setTheme(mode) {
         localStorage.setItem('theme', mode);
         applyTheme();
