@@ -1251,12 +1251,14 @@ table.tokens-list td.col-actions .btn-sm {
     box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
-/* Disabled toggle - keeps the same brand-primary track colour as the
-   editable variant; only the cursor changes to not-allowed so the
-   operator reads it as "current state, not editable from this UI".
-   Used for things that would foot-gun the operator if changed from
-   inside the portal, e.g. [admin].enabled. */
+/* Disabled toggle - replace the brand-primary "on" track with the
+   muted text colour so the operator immediately reads it as
+   "inactive / read-only" instead of mistaking it for an editable
+   on switch. cursor: not-allowed reinforces the same signal on
+   hover. Used for things that would foot-gun the operator if
+   changed from inside the portal, e.g. [admin].enabled. */
 .toggle input:disabled + .toggle-slider {
+    background: var(--text-muted);
     cursor: not-allowed;
 }
 
