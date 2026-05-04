@@ -1251,13 +1251,12 @@ table.tokens-list td.col-actions .btn-sm {
     box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
-/* Disabled toggle (read-only state indicator) - swap the brand-primary
-   "on" track for muted grey and switch the cursor; nothing else changes
-   so the slider stays in its checked/unchecked position with full opacity.
-   Used for things that would foot-gun the operator if changed from inside
-   the portal, e.g. [admin].enabled. */
+/* Disabled toggle - keeps the same brand-primary track colour as the
+   editable variant; only the cursor changes to not-allowed so the
+   operator reads it as "current state, not editable from this UI".
+   Used for things that would foot-gun the operator if changed from
+   inside the portal, e.g. [admin].enabled. */
 .toggle input:disabled + .toggle-slider {
-    background: var(--text-muted);
     cursor: not-allowed;
 }
 
