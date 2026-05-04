@@ -288,6 +288,13 @@ async def server_edit(request: Request) -> Response:
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
     request_timeout = _parse_timeout(form.get("request_timeout"))
+    # Frontend creds for graph_render (v1.27+). Username writes
+    # through; password follows the same "leave empty to keep" rule
+    # as api_token so the existing value is not wiped on every save.
+    # The presence of the field is what tells us the user explicitly
+    # cleared it (vs. just not changing).
+    frontend_username = str(form.get("frontend_username", "")).strip()
+    frontend_password = str(form.get("frontend_password", "")).strip()
 
     # Validate new name (allow keeping the same name as a no-op rename)
     if not new_name or not _SERVER_NAME_RE.match(new_name):
@@ -319,6 +326,18 @@ async def server_edit(request: Request) -> Response:
         zabbix[server_name]["read_only"] = read_only
         zabbix[server_name]["verify_ssl"] = verify_ssl
         zabbix[server_name]["request_timeout"] = request_timeout
+        # frontend_username always writes (text field, blank = clear).
+        zabbix[server_name]["frontend_username"] = frontend_username
+        # frontend_password: only overwrite when the operator typed
+        # something. Empty = keep current. To explicitly clear, the
+        # operator clears username (above) which makes the wrapper
+        # ignore the password regardless.
+        if frontend_password:
+            zabbix[server_name]["frontend_password"] = frontend_password
+        elif not frontend_username:
+            # User cleared username -> also drop password to avoid
+            # orphan secret stored without a matching username.
+            zabbix[server_name].pop("frontend_password", None)
 
         if renamed:
             # tomlkit has no rename — copy the table data into a new entry

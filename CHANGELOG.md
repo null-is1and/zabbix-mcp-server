@@ -2,6 +2,10 @@
 
 ## v1.27 - unreleased
 
+### Added
+
+- **`frontend_username` / `frontend_password` fields in the Servers Edit form** (admin portal). v1.26 shipped the wrapper code that uses these for `graph_render`'s frontend-cookie login, but the fields were only reachable via direct `config.toml` editing. The form now has a "Graph rendering (optional)" fieldset under Request timeout, with the same "leave password empty to keep current" semantics the API token uses. Username writes through unconditionally; clearing the username also drops a stored password so we never leave an orphan secret. Reported in field after the v1.26 upgrade - operator opened the admin UI looking for a place to set the new feature, found nothing, and had to be pointed at `/etc/zabbix-mcp/config.toml`.
+
 ### Planned
 
 - Dynamic tools/list filtering by token scopes (issue #38, port from

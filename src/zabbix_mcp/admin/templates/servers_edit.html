@@ -50,6 +50,28 @@
             <small class="text-muted">HTTP timeout for Zabbix API calls. Default <code>300</code> matches the Zabbix PHP frontend's <code>max_execution_time</code>. Lower it for a slow WAN link you want to fail fast on; raise it for workflows that export large templates or fetch long history ranges.</small>
         </div>
 
+        <fieldset style="border:1px solid var(--color-border); border-radius:6px; padding:12px 16px; margin-bottom:16px;">
+            <legend style="padding:0 8px; font-size:0.9em; color:var(--color-text-muted);">Graph rendering (optional)</legend>
+            <p class="text-muted" style="margin-top:0; margin-bottom:12px; font-size:0.88em;">
+                The <code>graph_render</code> tool renders Zabbix graphs as PNGs. Zabbix 6.0+ <code>chart2.php</code> does NOT accept the API token directly &mdash; it requires a signed <code>zbx_session</code> cookie issued by the frontend login form. Set credentials below so the wrapper can perform a one-time browser-style login and cache the cookie.
+                Leave both empty to skip graph rendering for this server (other tools keep working).
+                <strong>Use a dedicated read-only account</strong>, not your admin user. Credentials are sent only over HTTPS &mdash; over plain HTTP the wrapper refuses to log in.
+            </p>
+            <div class="form-group">
+                <label class="form-label" for="srv-fe-user">Frontend username <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix UI account used for graph_render only. Recommended: dedicated 'graph_reader' user with role User and read-only permissions on the host groups whose graphs you want to render.">&#x1F6C8;</span></label>
+                <input type="text" name="frontend_username" id="srv-fe-user" class="form-input" value="{{ server.frontend_username | default('') }}" autocomplete="off" placeholder="graph_reader">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="srv-fe-pass">Frontend password <span class="tooltip-icon" tabindex="0" data-tooltip="Password for the frontend account above. Stored in config.toml (or referenced via ${ENV_VAR} the same way as api_token). Leave empty to keep the current value.">&#x1F6C8;</span></label>
+                <input type="password" name="frontend_password" id="srv-fe-pass" class="form-input" value="" placeholder="{% if server.frontend_password %}Leave empty to keep current{% else %}Not configured{% endif %}" autocomplete="new-password">
+                <small class="text-muted">
+                    {% if server.frontend_password %}Password is set. Leave empty to keep it; type a new value to replace it. Use <code>${ENV_VAR}</code> to reference an environment variable.
+                    {% else %}Not configured. <code>graph_render</code> will fail until you set this.
+                    {% endif %}
+                </small>
+            </div>
+        </fieldset>
+
         <div id="edit-test-result" style="margin-bottom:12px;"></div>
 
         <div style="display:flex; gap:8px;">
