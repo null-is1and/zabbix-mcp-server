@@ -536,28 +536,63 @@ th {
     user-select: none;
 }
 
+/* Sortable column header - stacked ▲▼ pair on every sortable
+   column, fades the inactive arrow when one direction is active.
+   Was a single ↕ glyph (U+2195) before, which renders inconsistently
+   across system fonts (DejaVu / Noto / SF Pro all draw it slightly
+   different and at different baselines vs. the ↑/↓ active state),
+   so the unsorted columns looked off-pattern next to the active one. */
 th.sortable {
     cursor: pointer;
     position: relative;
     padding-right: 28px;
 }
 
+th.sortable::before,
 th.sortable::after {
-    content: '\2195';
     position: absolute;
     right: 10px;
+    font-size: 0.65rem;
+    line-height: 1;
+    color: currentColor;
     opacity: 0.3;
-    font-size: 0.85rem;
+    transition: opacity 0.12s ease;
+    pointer-events: none;
 }
 
+th.sortable::before {
+    content: '\25B2';        /* ▲ U+25B2 BLACK UP-POINTING TRIANGLE */
+    top: calc(50% - 0.65em - 1px);
+}
+
+th.sortable::after {
+    content: '\25BC';        /* ▼ U+25BC BLACK DOWN-POINTING TRIANGLE */
+    top: calc(50% + 1px);
+}
+
+th.sortable.sort-asc::before {
+    opacity: 1;
+    color: var(--color-primary, var(--text-primary));
+}
 th.sortable.sort-asc::after {
-    content: '\2191';
-    opacity: 0.8;
+    opacity: 0.15;
 }
 
 th.sortable.sort-desc::after {
-    content: '\2193';
-    opacity: 0.8;
+    opacity: 1;
+    color: var(--color-primary, var(--text-primary));
+}
+th.sortable.sort-desc::before {
+    opacity: 0.15;
+}
+
+th.sortable:hover::before,
+th.sortable:hover::after {
+    opacity: 0.7;
+}
+th.sortable.sort-asc:hover::after,
+th.sortable.sort-desc:hover::before {
+    opacity: 0.4;
 }
 
 td {
