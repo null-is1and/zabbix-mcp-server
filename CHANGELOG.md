@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (feature/v1.30)
+
+External-feedback release. After v1.29 went out, two pieces of feedback surfaced from the wider MCP community: an external review by [Quadrata Insights](https://www.quadratainsights.com) flagged that Claude has to chain too many low-level Zabbix calls (`host_get` -> `interface_get` -> `problem_get` -> `item_get` -> `history_get`) just to answer "what's wrong with web01"; and discussion #27 asked for a one-shot way to obtain a Let's Encrypt certificate when the MCP server terminates TLS itself. v1.30 addresses both.
+
+### Added
+
+- **Pre-correlated view tools** in the `monitoring` / `extensions` groups, designed to fold three to five raw Zabbix API calls into a single round-trip the LLM can reason about:
+  - `host_status_get` - host + interfaces + active problems + last value of the top items in one call. Accepts `host_id` or `host` (name).
+  - `hostgroup_overview_get` - host group health roll-up with the top-N noisiest hosts. Accepts `groupid` or `group`, `top_n` (default 5).
+  - `infrastructure_summary_get` - whole-deployment dashboard summary (problem counts by severity, busiest groups, biggest hostgroups). `top_n` controls breadth.
+  - `item_history_summary_get` - item metadata + history window + min/max/avg over the period. Accepts `itemid` or `(host, key)`, `period` (default `"1h"`), `limit` (default 100).
+  - All four reuse the existing `_filter_active_problems` helper so they stay consistent with `problem_active_get`. Each is registered in `monitoring` and `extensions` so monitoring-only tokens see them after the per-token tools/list filter.
+- **`./deploy/install.sh request-tls` subcommand** automates Let's Encrypt issuance when the MCP server terminates TLS itself (discussion #27). Wraps `certbot certonly` (auto-detects standalone vs webroot based on whether anything is bound to :80 already), symlinks `fullchain.pem` / `privkey.pem` into `/etc/zabbix-mcp/tls/`, idempotently writes `[server].tls_cert_file` and `[server].tls_key_file` into `config.toml`, installs a deploy hook at `/etc/letsencrypt/renewal-hooks/deploy/zabbix-mcp-server.sh` so post-renewal the service auto-reloads, and enables `certbot.timer`. Re-runnable any time you rotate or add a hostname. Usage: `sudo ./deploy/install.sh request-tls --hostname mcp.example.com --email you@example.com`.
+
+### Documentation
+
+- `docs/OAUTH.md` gains a "Let's Encrypt one-liner" callout in the TLS section pointing at the new installer subcommand.
+
 ## v1.29 - 2026-05-04
 
 OAuth polish release. v1.28 shipped the embedded OAuth 2.1 authorization server; v1.29 closes the loop on operator hygiene that came out of field deployment - two-step consent screen with per-scope checkboxes, role-capped scope grant, refresh-token reuse detection, per-client IP allowlists and TTL overrides, and a wizard step that generates a Caddy / Nginx / Apache reverse-proxy config from `[server].public_url`.

@@ -50,6 +50,27 @@ the OAuth routes.
 
 For production you have two equally good options:
 
+> **Let's Encrypt one-liner.** If the MCP server itself is going to terminate
+> TLS (option 1 below), the installer can grab the cert for you:
+>
+> ```bash
+> sudo ./deploy/install.sh request-tls \
+>     --hostname mcp.example.com \
+>     --email you@example.com
+> ```
+>
+> The command runs `certbot certonly`, picks `--standalone` if port 80 is
+> free or `--webroot` otherwise, symlinks the cert into
+> `/etc/zabbix-mcp/tls/`, writes `tls_cert_file` + `tls_key_file` into
+> `config.toml`, installs a deploy hook at
+> `/etc/letsencrypt/renewal-hooks/deploy/zabbix-mcp-server.sh` that
+> reloads the service after each renewal, and enables the certbot
+> renewal timer. Re-run any time you add or rotate a hostname.
+>
+> If you already terminate TLS in a reverse proxy (option 2), let
+> Caddy/nginx-proxy/cert-manager/Cloudflare handle the cert there - the
+> MCP server only needs `public_url` and `trusted_proxies`.
+
 1. **Native TLS in the MCP server.** Set `tls_cert_file` and
    `tls_key_file` in `[server]`. The server terminates TLS itself
    and the issuer URL points at the same port:

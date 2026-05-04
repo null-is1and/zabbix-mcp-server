@@ -170,6 +170,8 @@ Commands:
   set-admin-password  Reset the admin portal password
   generate-token      Generate a new MCP bearer token and add it to config.toml
   test-config         Validate config.toml syntax and report errors
+  request-tls         Obtain a Let's Encrypt cert via certbot, wire it into config.toml,
+                      install a renewal hook (usage: request-tls --hostname mcp.example.com [--email you@example.com])
 
 Options:
   --dry-run           Check prerequisites without installing anything
@@ -1900,6 +1902,185 @@ except ImportError:
 }
 
 # --------------------------------------------------------------------------- #
+# Request a Let's Encrypt cert via certbot, wire it into config.toml,
+# install a deploy-hook so renewal automatically restarts the MCP server.
+# --------------------------------------------------------------------------- #
+do_request_tls() {
+    local hostname=""
+    local email=""
+    local mode="auto"  # auto | standalone | webroot
+    local webroot=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --hostname=*) hostname="${1#*=}"; shift ;;
+            --hostname)   hostname="$2"; shift 2 ;;
+            --email=*)    email="${1#*=}"; shift ;;
+            --email)      email="$2"; shift 2 ;;
+            --standalone) mode="standalone"; shift ;;
+            --webroot=*)  mode="webroot"; webroot="${1#*=}"; shift ;;
+            --webroot)    mode="webroot"; webroot="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    info "=== Zabbix MCP Server - Let's Encrypt cert request ==="
+    echo
+
+    if [[ -z "$hostname" ]]; then
+        error "Missing --hostname. Example:"
+        error "  sudo ./deploy/install.sh request-tls --hostname mcp.example.com --email you@example.com"
+        exit 1
+    fi
+
+    # Sanity check the hostname looks fully qualified.
+    if [[ "$hostname" != *.* ]] || [[ "$hostname" =~ ^[0-9.]+$ ]]; then
+        error "--hostname must be a fully-qualified domain that resolves to this host."
+        error "  Got: '$hostname' (looks like an IP or unqualified name; Let's Encrypt will reject it)"
+        exit 1
+    fi
+
+    # Check that certbot is installed; offer to install on the spot.
+    if ! command -v certbot &>/dev/null; then
+        info "certbot not found. Installing..."
+        if [[ -f /etc/redhat-release ]]; then
+            spin "Installing certbot (dnf)" bash -c "dnf install -y epel-release && dnf install -y certbot" \
+                || { error "Failed to install certbot via dnf. Install manually and re-run."; exit 1; }
+        elif [[ -f /etc/debian_version ]]; then
+            spin "Refreshing apt indexes" bash -c "apt-get update -qq" || true
+            spin "Installing certbot (apt)" bash -c "apt-get install -y certbot" \
+                || { error "Failed to install certbot via apt. Install manually and re-run."; exit 1; }
+        else
+            error "Unsupported OS. Install certbot manually (https://certbot.eff.org) and re-run."
+            exit 1
+        fi
+    fi
+
+    # Auto-detect mode if not explicitly chosen.
+    if [[ "$mode" == "auto" ]]; then
+        # Heuristic: if anything is bound to :80 already, prefer webroot
+        # over standalone (avoids certbot needing to take over the port).
+        if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE ':80$'; then
+            mode="webroot"
+            # Common webroot - operators can override with --webroot=PATH.
+            if [[ -d /usr/share/zabbix/ui ]]; then
+                webroot="${webroot:-/usr/share/zabbix/ui}"
+            elif [[ -d /var/www/html ]]; then
+                webroot="${webroot:-/var/www/html}"
+            else
+                webroot="${webroot:-/var/www/letsencrypt}"
+                mkdir -p "$webroot"
+            fi
+            info "Detected another service on :80 — using certbot webroot mode (--webroot $webroot)"
+        else
+            mode="standalone"
+            info "Port :80 is free — using certbot standalone mode"
+        fi
+    fi
+
+    # Compose certbot args.
+    local certbot_args=(certonly --non-interactive --agree-tos --no-eff-email --keep-until-expiring)
+    if [[ -n "$email" ]]; then
+        certbot_args+=(--email "$email")
+    else
+        certbot_args+=(--register-unsafely-without-email)
+        warn "No --email supplied. Let's Encrypt will not be able to email you about renewal failures."
+    fi
+    certbot_args+=(--domains "$hostname")
+    case "$mode" in
+        standalone) certbot_args+=(--standalone) ;;
+        webroot)    certbot_args+=(--webroot --webroot-path "$webroot") ;;
+    esac
+
+    info "Running: certbot ${certbot_args[*]}"
+    if ! certbot "${certbot_args[@]}"; then
+        error "certbot failed. Common causes:"
+        error "  - hostname does not resolve to this host's public IP (DNS not propagated yet)"
+        error "  - port 80 / 443 is not reachable from the public Internet"
+        error "  - rate-limited by Let's Encrypt (5 certs per registered domain per week)"
+        exit 1
+    fi
+    ok "Certificate issued for $hostname"
+
+    # Symlink the cert + key into our TLS dir so an operator who later
+    # rotates the certbot install does not have to chase the new path.
+    local fullchain="/etc/letsencrypt/live/$hostname/fullchain.pem"
+    local privkey="/etc/letsencrypt/live/$hostname/privkey.pem"
+    if [[ ! -f "$fullchain" ]] || [[ ! -f "$privkey" ]]; then
+        error "certbot reported success but the expected files are missing: $fullchain"
+        exit 1
+    fi
+    mkdir -p "$CONFIG_DIR/tls"
+    ln -sfn "$fullchain" "$CONFIG_DIR/tls/fullchain.pem"
+    ln -sfn "$privkey"   "$CONFIG_DIR/tls/privkey.pem"
+    chown -h "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR/tls/fullchain.pem" "$CONFIG_DIR/tls/privkey.pem" 2>/dev/null || true
+    ok "Symlinks: $CONFIG_DIR/tls/{fullchain,privkey}.pem -> /etc/letsencrypt/live/$hostname/"
+
+    # Wire the symlinks into config.toml. Idempotent: existing keys are
+    # rewritten in place; missing keys are inserted under [server].
+    if [[ ! -f "$CONFIG_DIR/config.toml" ]]; then
+        warn "$CONFIG_DIR/config.toml does not exist - skipping config update."
+    else
+        python3 - "$CONFIG_DIR/config.toml" "$CONFIG_DIR/tls/fullchain.pem" "$CONFIG_DIR/tls/privkey.pem" <<'PY'
+import re, sys
+path, cert, key = sys.argv[1], sys.argv[2], sys.argv[3]
+c = open(path).read()
+def upsert(c, key_name, value):
+    pattern = re.compile(r'^[ \t]*' + re.escape(key_name) + r'[ \t]*=.*$', re.MULTILINE)
+    new_line = f'{key_name} = "{value}"'
+    if pattern.search(c):
+        return pattern.sub(new_line, c, count=1)
+    # Insert right after [server] header
+    return re.sub(r'(\[server\][ \t]*\n)', r'\1' + new_line + '\n', c, count=1)
+c = upsert(c, "tls_cert_file", cert)
+c = upsert(c, "tls_key_file", key)
+open(path, "w").write(c)
+print("config.toml: tls_cert_file + tls_key_file written")
+PY
+        ok "Updated $CONFIG_DIR/config.toml ([server].tls_cert_file / tls_key_file)"
+    fi
+
+    # Install a certbot deploy-hook so a renewed cert auto-restarts the
+    # MCP server.  Hook lives at /etc/letsencrypt/renewal-hooks/deploy/
+    # and runs once per renewal, after certbot updates the symlinks.
+    local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    mkdir -p "$hook_dir"
+    local hook_path="$hook_dir/zabbix-mcp-server.sh"
+    cat > "$hook_path" <<HOOK
+#!/usr/bin/env bash
+# Reload zabbix-mcp-server after a successful Let's Encrypt renewal.
+# Auto-installed by zabbix-mcp-server install.sh request-tls.
+set -e
+systemctl reload-or-restart "$SERVICE_NAME" 2>/dev/null || systemctl restart "$SERVICE_NAME"
+HOOK
+    chmod 755 "$hook_path"
+    ok "Renewal hook: $hook_path"
+
+    # Make sure certbot's renewal timer is enabled (most distro packages
+    # ship one; just nudge it on).
+    if systemctl list-unit-files 2>/dev/null | grep -q "^certbot.timer"; then
+        systemctl enable --now certbot.timer 2>/dev/null && ok "certbot.timer enabled (auto-renewal active)" || true
+    elif systemctl list-unit-files 2>/dev/null | grep -q "^snap.certbot.renew.timer"; then
+        systemctl enable --now snap.certbot.renew.timer 2>/dev/null && ok "snap.certbot.renew.timer enabled" || true
+    fi
+
+    # Restart the MCP server right now so the new cert is picked up.
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        spin "Restarting $SERVICE_NAME to load the new cert" \
+            systemctl restart "$SERVICE_NAME" || warn "Service restart returned non-zero - check journalctl -u $SERVICE_NAME"
+    else
+        info "$SERVICE_NAME is not running; start it with: sudo systemctl start $SERVICE_NAME"
+    fi
+
+    echo
+    ok "Let's Encrypt setup complete. The cert auto-renews every 60 days; the deploy hook restarts the MCP server when a new cert lands."
+    echo
+    info "Verify with:"
+    info "  curl -v https://$hostname/health"
+    info "Renewal will run automatically; force-test with:"
+    info "  sudo certbot renew --dry-run"
+}
+
+# --------------------------------------------------------------------------- #
 # Main — parse arguments
 # --------------------------------------------------------------------------- #
 COMMAND=""
@@ -1924,10 +2105,17 @@ for arg in "$@"; do
         -T|--test-config|test-config)
             COMMAND="test-config"
             ;;
-        install|update|upgrade|uninstall|set-admin-password|generate-token)
+        install|update|upgrade|uninstall|set-admin-password|generate-token|request-tls)
             COMMAND="$arg"
             ;;
         *)
+            # request-tls accepts --hostname=X / --email=X / --standalone /
+            # --webroot / --webroot=X options that the loop above does not
+            # recognise on its own. Defer unknown args to the action handler
+            # rather than rejecting them here so request-tls can parse them.
+            if [[ "$COMMAND" == "request-tls" ]]; then
+                continue
+            fi
             error "Unknown argument: $arg"
             echo "Run '$0 --help' for usage information."
             exit 1
@@ -1972,5 +2160,8 @@ case "$COMMAND" in
         ;;
     install)
         do_install
+        ;;
+    request-tls)
+        do_request_tls "${ORIGINAL_ARGS[@]:1}"
         ;;
 esac

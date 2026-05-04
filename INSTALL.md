@@ -292,13 +292,23 @@ Omit the `headers` block if you didn't set `auth_token`.
 
 ### TLS / HTTPS
 
-For local clients (Claude Code, Cursor), self-signed certificates work fine. For remote MCP connections (Claude Desktop cloud), you need a **publicly trusted certificate** (e.g. Let's Encrypt).
+For local clients (Claude Code, Cursor), self-signed certificates work fine. For remote MCP connections (Claude Desktop cloud, ChatGPT custom apps), you need a **publicly trusted certificate** (e.g. Let's Encrypt).
 
-Recommended production setup — reverse proxy with automatic TLS:
+Two production paths:
+
+**A. Reverse proxy terminates TLS** (Caddy / nginx / Cloudflare):
 
 ```
 Client → Caddy/nginx (HTTPS, Let's Encrypt) → MCP Server (HTTP, localhost:8080)
 ```
+
+**B. Native TLS in the MCP server** - one-shot Let's Encrypt automation:
+
+```bash
+sudo ./deploy/install.sh request-tls --hostname mcp.example.com --email you@example.com
+```
+
+Runs certbot, symlinks the cert into `/etc/zabbix-mcp/tls/`, writes `tls_cert_file` + `tls_key_file` into `config.toml`, installs a deploy hook that reloads the service after each renewal, and enables auto-renewal. Re-run any time you rotate hostnames. Works with OAuth, bearer tokens, or no auth - it is general HTTPS, not OAuth-specific.
 
 See the [TLS / HTTPS section](README.md#tls--https) in README for details.
 

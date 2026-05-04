@@ -1044,13 +1044,25 @@ The server supports native HTTPS via `tls_cert_file` and `tls_key_file` in `conf
 
 > **Why?** Remote MCP connections from Claude Desktop are brokered through Anthropic's cloud infrastructure — the request comes from Anthropic's servers to your MCP server, not from your local machine. Self-signed certificates will be rejected because they can't be verified by a trusted Certificate Authority.
 
-**Recommended production setup:** Use a reverse proxy (nginx, Caddy) with Let's Encrypt for automatic TLS certificate management:
+**Two production paths, equally good - pick whichever fits your stack:**
+
+**Option A - reverse proxy terminates TLS (Caddy / nginx / Cloudflare):**
 
 ```
 Client → Caddy (HTTPS, Let's Encrypt) → MCP Server (HTTP, localhost:8080)
 ```
 
-This way the MCP server runs plain HTTP on localhost while the reverse proxy handles TLS termination with a publicly trusted certificate.
+The MCP server runs plain HTTP on localhost; the reverse proxy handles TLS termination with a publicly trusted certificate. Caddy provisions Let's Encrypt automatically; for nginx see the snippet in [`docs/OAUTH.md`](docs/OAUTH.md).
+
+**Option B - native TLS in the MCP server, cert from Let's Encrypt one-liner:**
+
+```bash
+sudo ./deploy/install.sh request-tls \
+    --hostname mcp.example.com \
+    --email you@example.com
+```
+
+The installer runs `certbot certonly` (auto-detects standalone vs webroot based on whether port 80 is in use), symlinks the cert into `/etc/zabbix-mcp/tls/`, writes `tls_cert_file` + `tls_key_file` into `[server]` in `config.toml`, installs a deploy hook that reloads the service after each renewal, and enables `certbot.timer`. Re-run any time you rotate or add a hostname. This works whether you use OAuth, bearer tokens, or no auth - it is a server-wide HTTPS feature, not OAuth-specific.
 
 ## Installer CLI
 
@@ -1063,6 +1075,9 @@ sudo ./deploy/install.sh [COMMAND] [OPTIONS]
 | `install` | Fresh installation (default) |
 | `update` | Update existing installation, preserve config |
 | `uninstall` | Complete removal — service, config, logs, virtualenv, system user |
+| `set-admin-password` | Reset the admin portal password |
+| `generate-token <name>` | Generate a new MCP bearer token and add it to `config.toml` |
+| `request-tls --hostname <host> [--email <addr>]` | Obtain a Let's Encrypt cert via certbot, wire it into `[server]`, install a renewal hook that reloads the service. See [TLS / HTTPS](#tls--https). |
 | `--dry-run` | Check prerequisites (Python, firewall, SELinux) without installing |
 | `--install-python` | Automatically install Python 3.12 if no suitable version found |
 | `-h`, `--help` | Show help |
