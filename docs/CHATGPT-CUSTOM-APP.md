@@ -15,7 +15,8 @@ Apps" feature. ChatGPT auto-discovers everything from the
   it must return JSON over HTTPS, not 404.
 - Server reachable from the OpenAI cloud over **standard port 443
   HTTPS**. Non-standard ports (`:8443`, `:9443`, ...) are rejected
-  by ChatGPT's discovery probe even when curl works.
+  by ChatGPT's discovery probe even when curl from another host
+  succeeds (see "Why standard port 443 only?" below).
 - Publicly-trusted TLS certificate (Let's Encrypt / commercial CA).
   Self-signed certs are rejected. See [`docs/OAUTH.md`](OAUTH.md)
   for reverse-proxy patterns (Apache, Nginx, Caddy).
@@ -25,40 +26,58 @@ Apps" feature. ChatGPT auto-discovers everything from the
 
 ## Walkthrough
 
+The flow below was driven end-to-end via Playwright on a live
+deployment at `https://student-postgresql-01.initmax.cz/mcp` so
+every screenshot is what you actually see.
+
 ### 1. Open the Custom Apps dialog
 
-In ChatGPT: **Settings -> Apps & Connectors -> Advanced settings**,
-toggle **Developer mode** on, click **+ Create**. The "New App"
-dialog opens.
+In ChatGPT: **Settings -> Apps & Connectors -> Apps**, click
+**Create app**. The "New App (Beta)" dialog opens.
+
+![New App dialog](screenshots-oauth/02-chatgpt-new-app.png)
 
 ### 2. Fill in the basics
 
 | Field | Value |
 |---|---|
-| Name | Whatever you want; appears in the chat tool menu (e.g. "Zabbix"). |
+| Name | Whatever you want; appears in the chat tool menu (e.g. "Zabbix" or "Wiki Zabbix MCP"). |
 | Description (optional) | Free-form. |
 | MCP Server URL | `https://<your-mcp-host>/mcp` - **standard 443, no port**. |
 | Authentication | **OAuth**. |
+
+![URL filled in](screenshots-oauth/03-chatgpt-url-filled.png)
 
 Do NOT put the issuer URL (`/`) or the discovery URL
 (`/.well-known/...`) in the MCP Server URL field - ChatGPT expects
 the protocol endpoint (`/mcp`).
 
+The "Advanced OAuth settings" row reads "Loading..." for a moment
+while ChatGPT probes `/.well-known/oauth-authorization-server` from
+the OpenAI cloud. When discovery succeeds it flips to "Review the
+discovered OAuth settings...".
+
 ### 3. Advanced OAuth settings
 
-Click **Advanced OAuth settings** to expand. This is where ChatGPT
-auto-discovers your server:
+Expand the **Advanced OAuth settings** card. This is where ChatGPT
+shows what it discovered:
 
-- **Client registration -> Registration method**: leave as
-  **Dynamic Client Registration (DCR)**. The server implements
-  RFC 7591 dynamic registration so ChatGPT auto-creates a public
-  client (PKCE-only, no shared secret) on first use.
-- Do NOT switch to "User-Defined OAuth Client" unless you know
-  why - it requires you to paste a `client_id` you registered
-  manually.
-- Default scopes: leave empty. The server's authorization server
-  metadata advertises no `scopes_supported`, so ChatGPT requests
-  the operator's full grant.
+![DCR auto-discovered](screenshots-oauth/04-chatgpt-dcr-discovered.png)
+
+- **Client registration -> Registration method**: ChatGPT picks
+  **Dynamic Client Registration (DCR)** automatically, with the
+  hint "ChatGPT will dynamically register an OAuth client using
+  the Registration URL in the OAuth endpoints section". Leave it.
+- Do NOT switch to "User-Defined OAuth Client" unless you have
+  a pre-registered `client_id` for some reason - DCR avoids that
+  step entirely.
+- "CIMD is unavailable because the server did not advertise CIMD
+  support" is **expected**. Client ID Metadata Documents are an
+  optional add-on we do not implement; DCR (RFC 7591) covers the
+  same ground.
+- Default scopes: leave empty. The server's metadata advertises
+  no `scopes_supported`, so ChatGPT requests the operator's full
+  grant at login time.
 
 If the panel says **"DCR is unavailable until a Registration URL
 is present in the OAuth endpoints section below"** the discovery
@@ -73,22 +92,55 @@ probe failed. Common causes:
 ### 4. Accept the disclaimer
 
 Tick **"I understand and want to continue"** under "Custom MCP
-servers introduce risk" and click **Create**.
+servers introduce risk" and click **Create**. The app lands in
+**Drafts** with a `DEV` badge - it is private to your account
+until OpenAI reviews it.
 
-### 5. Sign in to the MCP server
+### 5. Connect
 
-ChatGPT opens a browser tab pointing at your MCP server's
-`/oauth/login` page. The page renders in the same theme as the
-admin portal:
+Click the draft to open its detail card and press **Connect**.
+ChatGPT shows a permissions disclosure:
+
+![Connect permissions](screenshots-oauth/05-chatgpt-permissions.png)
+
+Press **Continue to <your app name>**. ChatGPT opens a new tab
+on `<your-mcp-host>/oauth/login?request_id=...` - that is the
+authorization step running on YOUR server, not on chatgpt.com.
+
+### 6. Sign in to the MCP server
+
+The login page renders in the same theme as the admin portal,
+with "ChatGPT is asking to use your operator account":
 
 ![Login form](screenshots-oauth/01-login-form.png)
 
-Type the **admin-portal username + password**. After "Sign in &
-allow", the browser redirects back to ChatGPT.
+Type the **admin-portal username + password** (`[admin.users.X]`
+in your `config.toml`). After "Sign in & allow", the browser is
+302-redirected to ChatGPT carrying the authorization code, ChatGPT
+exchanges it for an access token at `/token`, and the tab closes
+itself.
 
-The operator may close the tab once the success page appears -
-ChatGPT has already received the authorization code via the
-redirect.
+> Heads up: the OAuth request_id has a 10-minute TTL. If you walk
+> away from the login form for too long, you get an "Authorization
+> request invalid" page. Click Connect again from the draft card -
+> ChatGPT issues a fresh authorize URL.
+
+### 7. Connector status: Connected
+
+Back in Settings -> Apps -> your draft, the status flips to
+**Connected on YYYY-MM-DD** with **Authorization used: OAuth**:
+
+![Connected](screenshots-oauth/06-chatgpt-connected.png)
+
+### 8. Use it from a chat
+
+Open a new chat and ask a Zabbix question that names the
+connector. ChatGPT picks tools from the MCP catalog and renders
+real data:
+
+![Tool call result](screenshots-oauth/07-chatgpt-tool-call.png)
+
+The "Called tool" pill confirms the call went through MCP.
 
 ### 6. Use the connector
 
@@ -100,6 +152,46 @@ the Zabbix MCP tools appear in the chat tool menu. Try:
 ChatGPT picks `problem_active_get` from the catalog (the
 description steers it there) and renders host names + severity
 labels.
+
+## Why standard port 443 only?
+
+OpenAI's docs say the connector needs an "HTTPS endpoint" without
+mentioning the port. In practice ChatGPT's discovery probe rejects
+non-443 HTTPS even when the cert is valid Let's Encrypt and curl
+from the operator's laptop works. The exact reason is not in the
+public docs, but two observable signals point at the same root
+cause:
+
+1. **The error message format.** A blocked non-443 connection
+   surfaces as "Error fetching OAuth configuration. Cannot connect
+   to host `<host>:<port>` ssl:default [None]" - the `ssl:default`
+   marker is what aiohttp produces when the client side TLS
+   context has no SNI hint to use, which lines up with a probe
+   that only configures SNI for `host` (port 443) and falls back
+   to bare-host on anything else. Let's Encrypt requires SNI, so
+   the bare-host probe gets a default vhost cert (or rejected),
+   and the probe gives up.
+
+2. **Empirical reachability.** `curl -v ... :8443` from a third-party
+   host shows TLS 1.3 + valid cert + 200 OK. The same URL from
+   ChatGPT's cloud worker shows the error above. Switching the
+   server to share `:443` with the existing Apache vhost (path
+   based proxying, see `docs/OAUTH.md`) flips ChatGPT to the happy
+   path immediately - same TLS cert, same backend, only the port
+   changes.
+
+Industry-wise this is consistent with how cloud egress hardening
+works: large SaaS vendors typically allow outbound 443 freely and
+treat non-443 HTTPS as suspicious (potential C2 / proxy bypass).
+ChatGPT's connector probe seems to follow the same pattern.
+
+**Practical consequence**: when you put OAuth + MCP behind a
+reverse proxy, route them on `:443`. If your `:443` already serves
+something else (like the Zabbix UI), use path-based routing
+(`/mcp`, `/authorize`, `/token`, `/.well-known/...`) - the
+operator's existing setup at student-postgresql-01.initmax.cz
+runs Zabbix on `/` and MCP on `/mcp` + OAuth paths, both via the
+same Apache `<VirtualHost *:443>`.
 
 ## What is happening on the wire
 
