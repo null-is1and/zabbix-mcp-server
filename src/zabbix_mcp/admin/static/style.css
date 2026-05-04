@@ -965,18 +965,21 @@ tbody tr:last-child td {
     margin-bottom: 4px;
 }
 
-/* Icon-only buttons. Adds a fixed square hit target so the icon
-   does not jitter when stroke widths differ between SVGs, and
-   keeps hover/focus visuals identical to text buttons. The icon
-   itself stays at currentColor so a btn-danger.btn-icon turns
-   red on hover etc. */
-.btn.btn-icon {
-    padding: 4px 6px;
+/* btn-sm-sized icon button. Stack with btn-sm + btn-icon on the
+   same element. Override the base .btn-icon defaults (32x32
+   square). Reported 2026-05-04 - icon buttons next to a text
+   Delete in /tokens looked oversized. */
+.btn.btn-sm.btn-icon {
+    padding: 0 8px;
     line-height: 0;
-    min-width: auto;
+    min-width: 0;
+    min-height: 0;
+    height: 26px;
 }
-.btn.btn-icon svg {
+.btn.btn-sm.btn-icon svg {
     display: block;
+    width: 13px;
+    height: 13px;
 }
 
 /* Wide-table polish for the tokens list: compact Actions column +
