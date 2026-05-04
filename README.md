@@ -1015,7 +1015,7 @@ The GitHub releases API is polled at three triggers:
 
 1. **Once at server boot** (best-effort), so the banner reflects reality even before anyone logs in.
 2. **On every successful admin login**, throttled to one outbound call per 60 seconds. A burst of logins or a reload loop hits the cache, not GitHub.
-3. **On demand via the "Check now" button** next to the version pill - bypasses the throttle, useful right after an upgrade to confirm the new version registered without waiting out the cache.
+3. **On demand via the "Check now" button** in `Settings -> Admin Portal` (under the "Check for updates" toggle) - bypasses the throttle, useful right after an upgrade to confirm the new version registered without waiting out the cache.
 
 Disable in offline / air-gapped environments by setting:
 

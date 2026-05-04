@@ -18,9 +18,9 @@ The check fires:
      won't hammer the public GitHub rate limit (60 unauth req/h/IP).
   3. on demand via ``/api/check-updates`` (admin/operator role) which
      calls ``force_check()`` and bypasses the throttle. Wired to the
-     "Check now" button next to the version pill in the header so an
-     operator who just upgraded does not have to wait out the
-     throttle to confirm they are on the latest version.
+     "Check now" button in Settings -> Admin Portal so an operator
+     who just upgraded does not have to wait out the throttle to
+     confirm they are on the latest version.
 
 The result is cached in memory and persisted to
 ``/etc/zabbix-mcp/state/version-cache.json`` so a restart does not
