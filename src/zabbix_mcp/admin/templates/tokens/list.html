@@ -59,10 +59,26 @@
                     <input type="checkbox" class="bulk-select" value="{{ token.id }}" aria-label="Select {{ token.name }}">
                 </td>
                 {% endif %}
-                <td class="cell-truncate" title="{{ token.name }}">
+                <td class="cell-truncate">
+                    {# No native title="..." here - the cell-truncate max-width
+                       only kicks in for very long names, and when it does
+                       the styled CSS tooltip on hover (data-tooltip on the
+                       link) is the right surface to show the full text.
+                       The native title="..." created a duplicate plain
+                       browser tooltip stacking on top of the badge's
+                       styled one - reported 2026-05-04 as a glitch. #}
                     <a href="/tokens/{{ token.id }}" class="text-primary" style="font-weight:500;">{{ token.name }}</a>
                     {% if token.is_legacy %}
-                    <span class="badge badge-warning tooltip-right" style="margin-left:4px; cursor:pointer;" tabindex="0" role="button" data-tooltip="Migrated from legacy auth_token in config.toml. Recommended: create a new token with proper scopes, server restrictions and IP limits, then remove the legacy auth_token from config.">Legacy</span>
+                    {# Compact "!" icon instead of a wide "Legacy" pill.
+                       Same warning color, same hover tooltip explaining
+                       the migration. Reported 2026-05-04 - the wide pill
+                       wasted column width that nudged the table into
+                       horizontal scroll on a 1200px screen. #}
+                    <span class="badge badge-warning tooltip-right"
+                          style="margin-left:4px; cursor:pointer; min-width:20px; padding:2px 6px; justify-content:center;"
+                          tabindex="0" role="button"
+                          aria-label="Legacy token migrated from auth_token"
+                          data-tooltip="Legacy: migrated from the legacy auth_token in config.toml. Recommended: create a new token with proper scopes, server restrictions and IP limits, then remove the legacy auth_token from config.">!</span>
                     {% endif %}
                 </td>
                 <td>
