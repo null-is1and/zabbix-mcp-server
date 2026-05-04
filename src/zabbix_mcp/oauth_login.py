@@ -54,8 +54,16 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from zabbix_mcp import __version__ as _zmcp_version
+from zabbix_mcp.admin.auth import LoginRateLimiter
 
 logger = logging.getLogger("zabbix_mcp.oauth_login")
+
+# Per-IP brute-force throttle for /oauth/login.  Same parameters as the
+# admin portal's /login (5 attempts per 5 minutes per IP) so an attacker
+# does not get a softer surface here just because the OAuth flow is on
+# a different port.  Single instance shared across requests via module
+# scope - this module is imported once per server process.
+_oauth_login_limiter = LoginRateLimiter()
 
 # Reuse the admin portal's Jinja env so the login + error pages look
 # identical to the portal's own login surface (logo, palette, theme
@@ -160,6 +168,19 @@ async def handle_oauth_login(
     username = str(form.get("username", "") or "").strip()
     password = str(form.get("password", "") or "")
 
+    # Brute-force throttle by client IP (parity with admin /login).
+    # Read the IP from the contextvar set by _client_ip_middleware so
+    # an X-Forwarded-For from a trusted proxy is honoured upstream.
+    from zabbix_mcp.token_store import current_client_ip
+    client_ip = current_client_ip.get() or (
+        request.client.host if request.client else "unknown"
+    )
+    if not _oauth_login_limiter.check(client_ip):
+        return _render_error_page(
+            "Too many failed login attempts. Wait 5 minutes before trying again.",
+            status_code=429,
+        )
+
     pending = provider._pending.get(request_id)
     if pending is None:
         return _render_error_page(
@@ -168,6 +189,7 @@ async def handle_oauth_login(
         )
 
     if not _verify_admin_user(config, username, password):
+        _oauth_login_limiter.record_attempt(client_ip)
         client_name = (pending.client.client_name or "").strip() or str(pending.client.client_id or "")
         return HTMLResponse(_render_template(
             "oauth_login.html",
@@ -177,6 +199,7 @@ async def handle_oauth_login(
             error="Invalid username or password.",
             username=username,
         ), status_code=401)
+    _oauth_login_limiter.reset(client_ip)
 
     granted_scopes = list(pending.params.scopes or [])
     redirect_url = provider.complete_pending(

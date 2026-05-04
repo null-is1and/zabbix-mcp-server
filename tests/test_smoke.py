@@ -1703,6 +1703,132 @@ class TestToolsListTokenFilter(unittest.TestCase):
         self.assertNotIn("host_delete", names)
 
 
+class TestOAuthProvider(unittest.IsolatedAsyncioTestCase):
+    """Unit tests for the embedded OAuth 2.1 authorization-server provider (#36)."""
+
+    def setUp(self):
+        from zabbix_mcp.oauth_provider import ZmcpOAuthProvider
+        self.provider = ZmcpOAuthProvider(
+            public_url="https://mcp.example.com",
+            token_store=None,
+            login_path="/oauth/login",
+        )
+
+    async def test_register_assigns_client_id(self):
+        from mcp.shared.auth import OAuthClientInformationFull
+        ci = OAuthClientInformationFull(
+            redirect_uris=["http://localhost:8765/callback"],
+            client_name="test-client",
+            token_endpoint_auth_method="none",
+        )
+        await self.provider.register_client(ci)
+        self.assertTrue(ci.client_id)
+        self.assertIsNone(ci.client_secret)  # public client (PKCE)
+        self.assertIn(ci.client_id, self.provider._clients)
+
+    async def test_register_confidential_client_gets_secret(self):
+        from mcp.shared.auth import OAuthClientInformationFull
+        ci = OAuthClientInformationFull(
+            redirect_uris=["https://app.example.com/cb"],
+            client_name="confidential",
+            token_endpoint_auth_method="client_secret_post",
+        )
+        await self.provider.register_client(ci)
+        self.assertTrue(ci.client_secret)
+
+    async def test_authorize_redirects_to_login(self):
+        from mcp.shared.auth import OAuthClientInformationFull
+        from mcp.server.auth.provider import AuthorizationParams
+        ci = OAuthClientInformationFull(
+            redirect_uris=["http://localhost:8765/cb"],
+            client_name="x",
+            token_endpoint_auth_method="none",
+        )
+        await self.provider.register_client(ci)
+        params = AuthorizationParams(
+            state="s",
+            scopes=["monitoring"],
+            code_challenge="abc",
+            redirect_uri="http://localhost:8765/cb",
+            redirect_uri_provided_explicitly=True,
+            resource="https://mcp.example.com",
+        )
+        url = await self.provider.authorize(ci, params)
+        self.assertTrue(url.startswith("https://mcp.example.com/oauth/login?request_id="))
+        # The pending request should be retrievable for the login view
+        request_id = url.split("request_id=", 1)[1]
+        pending = self.provider._pending.get(request_id)
+        self.assertIsNotNone(pending)
+
+    async def test_complete_pending_mints_code_redirect(self):
+        from mcp.shared.auth import OAuthClientInformationFull
+        from mcp.server.auth.provider import AuthorizationParams
+        ci = OAuthClientInformationFull(
+            redirect_uris=["http://localhost:8765/cb"],
+            client_name="x",
+            token_endpoint_auth_method="none",
+        )
+        await self.provider.register_client(ci)
+        params = AuthorizationParams(
+            state="state-xyz",
+            scopes=["monitoring"],
+            code_challenge="abc",
+            redirect_uri="http://localhost:8765/cb",
+            redirect_uri_provided_explicitly=True,
+            resource="https://mcp.example.com",
+        )
+        url = await self.provider.authorize(ci, params)
+        request_id = url.split("request_id=", 1)[1]
+        redirect = self.provider.complete_pending(request_id, ["monitoring"], "tomas")
+        self.assertIsNotNone(redirect)
+        self.assertIn("http://localhost:8765/cb?", redirect)
+        self.assertIn("state=state-xyz", redirect)
+        self.assertIn("code=", redirect)
+
+    async def test_audience_binding_rejects_other_deployment(self):
+        # An access token issued for a different MCP server URL must not
+        # validate against this one. Synthesize the AccessToken directly
+        # (bypassing the code/refresh flow) for a focused test.
+        from mcp.server.auth.provider import AccessToken
+        bogus = AccessToken(
+            token="bogus-token-for-test",
+            client_id="any",
+            scopes=["*"],
+            expires_at=None,
+            resource="https://mcp.attacker.com",
+        )
+        self.provider._access_tokens["bogus-token-for-test"] = bogus
+        loaded = await self.provider.load_access_token("bogus-token-for-test")
+        self.assertIsNone(loaded)
+
+    async def test_legacy_bearer_falls_through_when_token_store_present(self):
+        # When the OAuth-issued token cache is empty the provider falls
+        # through to TokenStore.verify so existing [tokens.X] continue
+        # working. We stub a TokenStore with a verify() that returns a
+        # synthesized TokenInfo.
+        from unittest.mock import MagicMock
+        from zabbix_mcp.token_store import TokenInfo
+        info = TokenInfo(
+            id="legacy-id",
+            name="legacy-name",
+            token_hash="",
+            token_prefix="",
+            scopes=["monitoring"],
+            read_only=True,
+        )
+        ts = MagicMock()
+        ts.verify.return_value = info
+        from zabbix_mcp.oauth_provider import ZmcpOAuthProvider
+        p = ZmcpOAuthProvider(
+            public_url="https://mcp.example.com",
+            token_store=ts,
+        )
+        bridged = await p.load_access_token("zmcp_legacy_token_value")
+        self.assertIsNotNone(bridged)
+        self.assertEqual(list(bridged.scopes), ["monitoring"])
+        self.assertEqual(bridged.client_id, "legacy:legacy-id")
+
+
 class TestSecurityPathTraversal(unittest.TestCase):
     """Security tests for path traversal attacks in source_file resolution."""
 
