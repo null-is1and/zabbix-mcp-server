@@ -65,10 +65,6 @@ import secrets
 import time
 from collections import OrderedDict
 from typing import Any
-from urllib.parse import urlencode
-
-from pydantic import AnyHttpUrl, AnyUrl
-
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -76,6 +72,7 @@ from mcp.server.auth.provider import (
     OAuthAuthorizationServerProvider,
     RefreshToken,
     TokenError,
+    construct_redirect_uri,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
@@ -253,11 +250,16 @@ class ZmcpOAuthProvider:
         self._gc(self._codes, _MAX_LIVE_CODES)
         self._codes[code_str] = code
 
-        params: dict[str, str] = {"code": code_str}
-        if pending.params.state is not None:
-            params["state"] = pending.params.state
-        sep = "&" if "?" in str(pending.params.redirect_uri) else "?"
-        return f"{pending.params.redirect_uri}{sep}{urlencode(params)}"
+        # Use the framework helper for clean URL composition: it parses
+        # the redirect_uri, preserves any existing query params, handles
+        # fragments correctly, and re-encodes via urlunparse so we never
+        # produce malformed output even when the registered redirect_uri
+        # already carries a query string or hash fragment.
+        return construct_redirect_uri(
+            str(pending.params.redirect_uri),
+            code=code_str,
+            state=pending.params.state,
+        )
 
     # ------------------------------------------------------------------
     # OAuthAuthorizationServerProvider protocol implementation
@@ -362,12 +364,21 @@ class ZmcpOAuthProvider:
         self._refresh_tokens.pop(refresh_token.token, None)
         # Inherit subject from the previous access token for this refresh,
         # if we still have it; otherwise mark anonymous (the user logged
-        # in long enough ago that the AT expired).
+        # in long enough ago that the AT expired).  Also clear the stale
+        # _access_to_refresh entry so the back-pointer table does not
+        # accumulate dead rows on long-running sessions.
         subject = "anonymous"
         for at_str, at in list(self._access_tokens.items()):
             if self._access_to_refresh.get(at_str) == refresh_token.token:
                 subject = getattr(at, "_subject", "anonymous")
+                self._access_tokens.pop(at_str, None)
+                self._access_to_refresh.pop(at_str, None)
                 break
+        else:
+            # AT was already evicted; sweep any orphan back-pointer.
+            for at_str, rt_str in list(self._access_to_refresh.items()):
+                if rt_str == refresh_token.token:
+                    self._access_to_refresh.pop(at_str, None)
         new_scopes = list(scopes or refresh_token.scopes)
         return self._mint_token_pair(
             client_id=refresh_token.client_id,

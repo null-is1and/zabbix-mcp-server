@@ -2753,8 +2753,13 @@ def run_server(
                 # same-origin ``/static/...`` reference.  Path traversal is
                 # blocked by ``Path.resolve().is_relative_to()``.
                 fname = request.path_params.get("filename", "")
+                root = _admin_static_dir.resolve()
                 target = (_admin_static_dir / fname).resolve()
-                if not target.is_file() or not str(target).startswith(str(_admin_static_dir.resolve())):
+                try:
+                    inside = target.is_relative_to(root)
+                except ValueError:
+                    inside = False
+                if not target.is_file() or not inside:
                     return JSONResponse({"error": "not found"}, status_code=404)
                 return FileResponse(str(target))
 

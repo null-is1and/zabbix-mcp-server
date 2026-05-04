@@ -108,7 +108,7 @@
                     {% if can_revoke %}
                     <td>
                         <form method="post" action="/oauth-clients/{{ c.id | urlencode }}/revoke" style="display:inline;" onsubmit="return confirm('Revoke OAuth client &quot;{{ c.name }}&quot;? This deletes the registration AND invalidates every access/refresh token it currently holds.');">
-                            {{ csrf_input | safe }}
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
                         </form>
                     </td>

@@ -477,7 +477,7 @@
     {% for tr in selected_client.transports %}
       {% set is_active = (transport == tr) %}
       {% set is_server_default = (server_transport == tr) %}
-      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ tr }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}#wiz-step-4"
+      <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ tr }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}{% if effective_auth_mode %}&auth_mode={{ effective_auth_mode }}{% endif %}#wiz-step-4"
          class="badge {% if is_active %}badge-success{% else %}badge-muted{% endif %}"
          style="text-decoration: none; padding: 4px 10px;">
         {{ tr }}
@@ -526,7 +526,7 @@
       <summary>Show auto-detected addresses ({{ url_ctx.detected_ips | length }}) - may not be reachable from clients</summary>
       <div class="wiz-ip-pills">
         {% for ip in url_ctx.detected_ips %}
-          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&override_host={{ ip | urlencode }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}#wiz-step-4"
+          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&override_host={{ ip | urlencode }}{% if os_choice %}&os={{ os_choice | urlencode }}{% endif %}{% if effective_auth_mode %}&auth_mode={{ effective_auth_mode }}{% endif %}#wiz-step-4"
              class="{% if url_ctx.host == ip %}selected{% endif %}">{{ ip }}</a>
         {% endfor %}
       </div>
@@ -567,7 +567,7 @@
       {% if selected_client.config_paths | length > 1 %}
       <div class="wiz-os-tabs">
         {% for os_key in selected_client.config_paths.keys() %}
-          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&os={{ os_key | urlencode }}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}#wiz-step-4"
+          <a href="?server={{ zabbix_server_name | urlencode }}&token={{ token_id | urlencode }}&client={{ client_id | urlencode }}&transport={{ transport }}&os={{ os_key | urlencode }}{% if url_ctx.host and url_ctx.host != url_ctx.raw_host %}&override_host={{ url_ctx.host | urlencode }}{% endif %}{% if effective_auth_mode %}&auth_mode={{ effective_auth_mode }}{% endif %}#wiz-step-4"
              class="wiz-os-tab {% if (os_choice == os_key) or (not os_choice and loop.first) %}selected{% endif %}">{{ os_key }}</a>
         {% endfor %}
       </div>
