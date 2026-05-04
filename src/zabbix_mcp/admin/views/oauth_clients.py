@@ -430,10 +430,13 @@ async def oauth_enable(request: Request) -> Response:
     public_url = str(form.get("public_url", "") or "").strip().rstrip("/")
     dynamic_reg = "dynamic_registration_enabled" in form
 
-    # MUST be HTTPS - OAuth discovery over HTTP fails on every modern
-    # MCP client (ChatGPT, Claude Desktop, MCP Inspector all reject
-    # cleartext metadata). Localhost gets a pass for dev / smoke loops.
+    # MUST be HTTPS with a DNS name - OAuth discovery over HTTP fails
+    # on every modern MCP client (ChatGPT, Claude Desktop, MCP Inspector
+    # all reject cleartext metadata) and public CAs (Let's Encrypt etc.)
+    # do not issue TLS certs for raw IPs, so an IP-based URL would also
+    # fail at cert verification. Localhost gets a pass for dev / smoke.
     from urllib.parse import urlparse
+    import ipaddress
     if not public_url:
         return admin_app.flash_redirect(
             "/oauth-clients",
@@ -441,6 +444,12 @@ async def oauth_enable(request: Request) -> Response:
             flash_type="danger",
         )
     parsed = urlparse(public_url)
+    if not parsed.hostname:
+        return admin_app.flash_redirect(
+            "/oauth-clients",
+            "public_url has no hostname. Use the form 'https://mcp.example.com' or 'https://mcp.example.com:8080'.",
+            flash_type="danger",
+        )
     is_localhost = parsed.hostname in ("localhost", "127.0.0.1", "::1")
     if parsed.scheme != "https" and not is_localhost:
         return admin_app.flash_redirect(
@@ -448,10 +457,24 @@ async def oauth_enable(request: Request) -> Response:
             f"public_url must use https:// (got {parsed.scheme!r}). OAuth over plain HTTP is rejected by every modern MCP client. Use the install.sh request-tls subcommand for an automatic Let's Encrypt cert, or terminate TLS in a reverse proxy and point public_url at the proxy URL.",
             flash_type="danger",
         )
-    if not parsed.hostname:
+    # Reject raw IPs - CA-issued certs for IPs are not generally
+    # available, and ChatGPT / Claude Desktop refuse self-signed.
+    try:
+        ipaddress.ip_address(parsed.hostname.strip("[]"))
+        is_ip = True
+    except ValueError:
+        is_ip = False
+    if is_ip and not is_localhost:
         return admin_app.flash_redirect(
             "/oauth-clients",
-            "public_url has no hostname. Use the form 'https://mcp.example.com' or 'https://mcp.example.com:8080'.",
+            f"public_url must be a DNS name, not an IP address ({parsed.hostname!r}). Public CAs do not issue TLS certs for raw IPs, so ChatGPT and Claude Desktop will reject the cert chain. Point a DNS name at this host (e.g. mcp.your-domain.tld) and use that.",
+            flash_type="danger",
+        )
+    # Bare hostname (no TLD) cannot get a public cert either.
+    if not is_localhost and "." not in parsed.hostname:
+        return admin_app.flash_redirect(
+            "/oauth-clients",
+            f"public_url must be a fully-qualified DNS name like 'mcp.example.com', not the bare hostname {parsed.hostname!r}.",
             flash_type="danger",
         )
 

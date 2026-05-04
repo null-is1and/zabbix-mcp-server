@@ -32,24 +32,27 @@
         <div class="form-group">
             <label for="oauth-public-url">
                 Public URL
-                <span class="tooltip-icon" tabindex="0" data-tooltip="The externally-reachable HTTPS URL for this server. MCP clients use it to find the OAuth endpoints and to redirect operators back after login. Must be https:// (HTTP is rejected by ChatGPT/Claude). For testing, http://localhost:PORT is allowed. If the server runs behind a reverse proxy, this is the proxy's public URL, NOT 127.0.0.1.">&#x1F6C8;</span>
+                <span class="tooltip-icon" tabindex="0" data-tooltip="The externally-reachable HTTPS URL for this server. MUST be a DNS name (e.g. mcp.example.com), not an IP address - public CAs don't issue TLS certificates for IPs, and ChatGPT/Claude Desktop both require a valid cert. For local testing only, http://localhost:PORT is allowed. If the server runs behind a reverse proxy, this is the proxy's public URL.">&#x1F6C8;</span>
             </label>
             <input type="url" id="oauth-public-url" name="public_url" class="form-input"
                    value="{{ public_url }}"
                    placeholder="https://mcp.example.com"
                    required
-                   pattern="^(https://[^\s]+|http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/.*)?)$"
-                   title="Must be https:// (HTTP allowed only for localhost / 127.0.0.1).">
+                   pattern="^(https://([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(:\d+)?(/.*)?|http://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/.*)?)$"
+                   title="Must be https://<DNS name> (e.g. https://mcp.example.com). IP addresses are rejected because public CAs don't issue certs for IPs. http://localhost is allowed for local testing only.">
             <div class="form-hint" style="margin-top: 4px;">
-                Must be <strong>https://</strong>. The setting is also writable in <a href="/settings#mcp-server">Settings &rarr; MCP Server &rarr; Public URL</a>. No HTTPS yet? Run <code>sudo ./deploy/install.sh request-tls --hostname mcp.example.com</code> on the server to get a Let's Encrypt cert in one command.
+                Must be <strong>https://</strong> with a valid <strong>DNS name</strong> (IP addresses won't work - public CAs don't issue certs for IPs). The setting is also writable in <a href="/settings#mcp-server">Settings &rarr; MCP Server &rarr; Public URL</a>. No HTTPS yet? Run <code>sudo ./deploy/install.sh request-tls --hostname mcp.example.com</code> on the server to get a Let's Encrypt cert in one command.
             </div>
         </div>
 
-        <div class="form-group" style="margin-top: 12px;">
-            <label class="checkbox-label">
-                <input type="checkbox" name="dynamic_registration_enabled" checked>
+        <div class="form-group" style="margin-top: 16px;">
+            <label class="toggle-label">
+                <span class="toggle">
+                    <input type="checkbox" name="dynamic_registration_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </span>
                 Allow dynamic client registration (RFC 7591)
-                <span class="tooltip-icon" tabindex="0" data-tooltip="When checked, any MCP client can POST /register to add itself - this is what ChatGPT and Claude Desktop expect out-of-the-box. Uncheck if you want to lock the AS down to clients you manually pre-register in [oauth_clients.*]; new clients then get a 403 on /register and the operator has to add them by hand.">&#x1F6C8;</span>
+                <span class="tooltip-icon" tabindex="0" data-tooltip="When on, any MCP client can POST /register to add itself - this is what ChatGPT and Claude Desktop expect out-of-the-box. Turn off to lock the AS down to clients you manually pre-register in [oauth_clients.*]; new clients then get a 403 on /register and the operator has to add them by hand.">&#x1F6C8;</span>
             </label>
         </div>
 
@@ -72,9 +75,24 @@
             alert('Public URL is not a valid URL: ' + e.message);
             return false;
         }
-        var isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
+        var host = u.hostname;
+        var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
         if (u.protocol !== 'https:' && !isLocal) {
-            alert('Public URL must use https://. OAuth over plain HTTP is rejected by ChatGPT and Claude Desktop.\n\nGot: ' + u.protocol + '//' + u.hostname);
+            alert('Public URL must use https://. OAuth over plain HTTP is rejected by ChatGPT and Claude Desktop.\n\nGot: ' + u.protocol + '//' + host);
+            return false;
+        }
+        // IP literal check - public CAs don't issue certs for IPs.
+        // IPv4: pure dotted decimal. IPv6: bracketed.
+        var ipv4 = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+        var ipv6 = host.startsWith('[') || /^[0-9a-fA-F:]+$/.test(host);
+        if ((ipv4 || ipv6) && !isLocal) {
+            alert('Public URL must be a DNS name, not an IP address.\n\nPublic CAs (Let\'s Encrypt, DigiCert, ...) do not issue TLS certificates for raw IPs, so ChatGPT and Claude Desktop will reject the cert chain. Set up a DNS name pointing at this host (e.g. mcp.your-domain.tld) and use that instead.\n\nGot: ' + host);
+            return false;
+        }
+        // Bare hostname without TLD (e.g. https://server) won't satisfy
+        // the URL field's pattern but double-check here for the alert.
+        if (!isLocal && !host.includes('.')) {
+            alert('Public URL must be a fully-qualified DNS name (e.g. mcp.example.com), not just a bare hostname.\n\nGot: ' + host);
             return false;
         }
         return true;
