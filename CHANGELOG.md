@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.31 - 2026-06-03
+
+Patch release. Two operator-impacting bugs fixed; no new features. Everything else queued for the v2.0 cut (LDAP/SAML SSO, plugin loader runtime, tool-level audit log, SIEM forwarder, /metrics Prometheus endpoint) stays on the `release/2.0.0` branch.
+
+### Fixed
+
+- **OAuth client revoke returned HTTP 500** (#48). `oauth_clients.py` referenced `session.username` on four lines but the session object exposes the attribute as `session.user`. Clicking Revoke against a registered OAuth client triggered an `AttributeError` and the operator never saw the success flash. Live-confirmed fixed on a Rocky 9 OAuth backend - response is now 200 + redirect to `/oauth-clients`, audit log carries the `oauth_client.revoke` row with the operator's username. The native `window.confirm()` popup was also swapped for the same `showConfirm` modal the rest of the portal uses (Restart MCP server, Delete token, ...) so the confirmation UX matches.
+- **`verify_ssl = false` was not enough to talk to legacy Zabbix HTTPS frontends** (#51, reported by [@letran3691](https://github.com/letran3691)). OpenSSL 3.0 on RHEL 9 / Ubuntu 22.04+ disables unsafe legacy TLS renegotiation by default, which surfaces as `[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED]` against older Zabbix frontends - even though the operator already opted out of cert verification. `verify_ssl=false` now disables cert checks AND sets `OP_LEGACY_SERVER_CONNECT` on the SSL context so the original "trust everything for this backend" intent works end-to-end. Affects both the primary `ZabbixAPI` client path and the `user.checkAuthentication` / `user.logout` direct urlopen path used by OAuth login.
+
 ## v1.30 - 2026-05-05
 
 External-feedback release. Three threads of feedback land together: an external review by [Quadrata Insights](https://www.quadratainsights.com) flagged that Claude has to chain too many low-level Zabbix calls (`host_get` -> `interface_get` -> `problem_get` -> `item_get` -> `history_get`) just to answer "what's wrong with web01"; discussion #27 asked for a one-shot way to obtain a Let's Encrypt certificate when the MCP server terminates TLS itself; and field-test feedback caught two operator-hygiene gaps (manual GitHub-update poll, in-portal OAuth enable). v1.30 addresses all three plus a pre-release security/code-review pass.
