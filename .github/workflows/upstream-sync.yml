@@ -1,0 +1,64 @@
+name: Track upstream — initMAX/zabbix-mcp-server
+
+# This repo is a fork of initMAX/zabbix-mcp-server with local additions (CI,
+# Dockerfile, GHCR publish). It cannot fast-forward, so this job opens a PR that
+# merges the latest upstream main into our main when upstream is ahead. Merging
+# the PR is a push to main, which triggers publish.yml to rebuild + push the image.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: https://github.com/initMAX/zabbix-mcp-server.git
+      UPSTREAM_BRANCH: main
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        id: check
+        run: |
+          set -euo pipefail
+          git remote add upstream "$UPSTREAM"
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+          BEHIND=$(git rev-list --count HEAD..upstream/${UPSTREAM_BRANCH})
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          echo "Behind upstream by $BEHIND commit(s)."
+
+      - name: Merge upstream and open PR
+        if: steps.check.outputs.behind != '0'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="upstream-sync/run-${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+
+          # Attempt a clean merge. If it conflicts, fail loudly so a human resolves
+          # the divergence between our local additions and upstream.
+          if ! git merge --no-edit upstream/${UPSTREAM_BRANCH}; then
+            echo "::error::Merge conflict with upstream — resolve manually."
+            git merge --abort
+            exit 1
+          fi
+
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main --head "$BRANCH" \
+            --label upstream-bump \
+            --title "chore: sync ${{ steps.check.outputs.behind }} commit(s) from upstream initMAX/zabbix-mcp-server" \
+            --body "Automated upstream sync. Merges \`initMAX/zabbix-mcp-server:main\` into our fork (behind by ${{ steps.check.outputs.behind }} commit(s)).
+
+          **Before merge:** confirm the local additions (Dockerfile, publish.yml, config handling) still apply cleanly and the tool surface the proxy depends on is intact. Merging triggers publish.yml to rebuild and push the image."
