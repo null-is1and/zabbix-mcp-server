@@ -55,7 +55,11 @@ jobs:
           fi
 
           git push origin "$BRANCH"
+          # --repo is required: this repo is a fork, and `gh pr create` otherwise
+          # resolves the base repo to the parent (initMAX), where --label has no
+          # match and the whole command fails before the PR is opened.
           gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
             --base main --head "$BRANCH" \
             --label upstream-bump \
             --title "chore: sync ${{ steps.check.outputs.behind }} commit(s) from upstream initMAX/zabbix-mcp-server" \
