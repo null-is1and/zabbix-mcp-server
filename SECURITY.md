@@ -69,7 +69,7 @@ We will acknowledge your report within 48 hours and work with you on a fix.
 
 ### Origin / Host validation (DNS rebinding protection)
 
-Per the MCP 2025-11-25 spec, the server can reject requests whose `Origin` or `Host` header does not match the operator-declared allowlist (returns HTTP 403 / 421 respectively). This blocks DNS rebinding attacks against an MCP endpoint reachable from a browser context.
+Per the MCP spec (2025-11-25 and later), the server can reject requests whose `Origin` or `Host` header does not match the operator-declared allowlist (returns HTTP 403 / 421 respectively). This blocks DNS rebinding attacks against an MCP endpoint reachable from a browser context.
 
 **Recommended minimum configuration for production**: set `[server].public_url` to the externally-reachable URL of the server, e.g.
 
@@ -105,6 +105,22 @@ When `public_url`, `allowed_origins`, and `allowed_hosts` are all unset on a non
 - TLS private keys saved with `0600` permissions; TLS directory `0750`
 - Report template preview uses `SandboxedEnvironment` — prevents server-side template injection (SSTI)
 
+### Report Delivery (v1.35+)
+
+`report_generate` can hand a finished PDF to a resource link, the filesystem, or a mailbox instead of returning it inline. All three are reachable from an AI client, so all three are fenced by the operator.
+
+**Resource links** (`zabbix://reports/<id>`) hold the PDF in memory between the tool call and `resources/read`. The id is a random 122-bit token (uuid4 hex), not a filename or a sequence number, so links cannot be guessed or enumerated. Reads go through the same authenticated MCP endpoint as every other request - a link is not a public URL. The store is bounded by `[reporting].link_ttl` (default 1 h, max 24 h) and `[reporting].link_max_reports` (default 20, oldest evicted first), so a client cannot pin memory by generating reports it never fetches.
+
+**Download URLs** (`GET /reports/<id>.pdf`, v1.36+, on by default) publish the same report at an ordinary URL so a person can open it in a browser. This is a **capability URL**: the same random 122-bit id (uuid4) is the only credential, and the route is deliberately unauthenticated because an AI client hands the link to a human who has no bearer token. That trade is bounded by the link lifetime (`link_ttl`), the store cap, and the fact that one id yields exactly one report. Responses carry `Content-Disposition: attachment`, `Cache-Control: no-store, private`, `Referrer-Policy: no-referrer` (so the id does not leak through a `Referer` header) and `X-Content-Type-Options: nosniff`. Set `[reporting].download_urls = false` to serve the MCP resource link only.
+
+A URL is only built from an address somebody explicitly vouched for: `[server].public_url`, or `X-Forwarded-Host` / `-Proto` sent by a peer listed in `[server].trusted_proxies`. Nothing is inferred - not from the local bind, and not from a bare `Host` header. Both would resolve to loopback in the very deployment where a link matters (a server bound to `127.0.0.1` behind a proxy; with no host allowlist configured the MCP SDK also rejects any non-loopback `Host` outright), and a remote user handed `http://127.0.0.1:8080/reports/<id>.pdf` would send a live report id to whatever answers on their own machine. A forwarded value is accepted only as a bare authority, so no header can smuggle a path, a query or a second origin into the link; the *last* element of a forwarded chain is taken, since a proxy that appends leaves the client's own value in front. No URL is emitted on stdio transport either - there is no HTTP listener.
+
+The route is served outside the MCP endpoint's `TransportSecuritySettings`, so it carries no `Host` / `Origin` validation and no bearer requirement. Unless `[server].cors_origins` is configured - which wraps the whole application, this route included - it emits no CORS headers, so a hostile page cannot read a response even if it guessed an id. Serving these links over plaintext HTTP on a non-loopback bind logs a startup warning - the id travels as a bearer credential and the PDF is unencrypted in transit. Because the download route is served by the MCP backend, a reverse proxy that forwards an explicit list of paths must include `/reports/`.
+
+**Filesystem** delivery is refused unless `[reporting].output_dir` names an absolute, existing directory. The AI client cannot supply a path or a filename: the name is generated server-side from report type, host group and timestamp, sanitised to `[A-Za-z0-9._-]`, and the resolved target is asserted to stay inside the configured directory before the write. Files are written `0640`.
+
+**Email** delivery is refused unless `[reporting.email].enabled` is set **and** the recipient matches `allowed_recipients`. The allowlist is mandatory - the config loader and the admin form both refuse to enable email without it, because an LLM that can pick an arbitrary recipient is an exfiltration channel for monitoring data. Entries are exact addresses or `*@domain` globs; `*` disables the restriction entirely and should be a deliberate choice. Attachments are capped at 25 MB and SMTP failures are reported without echoing credentials. The SMTP password is stored in `config.toml` under the same `0640` permissions as the rest of the file, supports `${ENV_VAR}` indirection, and is never sent to the admin portal's browser session.
+
 ### Audit Logging
 
 - All admin portal actions logged to `/var/log/zabbix-mcp/audit.log` (JSON lines)
@@ -116,12 +132,14 @@ When `public_url`, `allowed_origins`, and `allowed_hosts` are all unset on a non
 
 | Version | Supported |
 |---|---|
-| 1.31 (latest) | Yes |
+| 1.36.1 (latest) | Yes |
+| 1.36 | Yes |
+| 1.35 | Yes |
+| 1.34 | Yes |
+| 1.33 | Yes |
+| 1.32 | Yes |
+| 1.31 | Yes |
 | 1.30 | Yes |
-| 1.29 | Yes |
-| 1.28 | Yes |
-| 1.27 | Yes |
-| 1.26 | Yes |
-| 1.25 | Yes |
-| 1.24 | Yes |
-| < 1.24 | No |
+| < 1.30 | No |
+
+Versions older than 1.30 no longer receive fixes - upgrade with `./deploy/install.sh update` (or `pip install --upgrade zabbix-mcp-server`); config and tokens are preserved across updates.
