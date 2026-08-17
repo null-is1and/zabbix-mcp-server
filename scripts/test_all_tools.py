@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 VERBOSE = False
 
@@ -97,7 +97,7 @@ async def call_tool(s: ClientSession, name: str, args: dict, suite: Suite) -> tu
         suite.record(name, "error", "timeout 20s", int((time.time() - t0) * 1000))
         return False, "timeout"
     elapsed = int((time.time() - t0) * 1000)
-    if result.isError:
+    if result.is_error:
         text = result.content[0].text if result.content else ""
         suite.record(name, "error", text[:160], elapsed)
         return False, text
@@ -224,7 +224,7 @@ def build_args(tool_name: str, suite: Suite):
     if n.endswith("_get") and n not in _CUSTOM_GETS:
         # Default: small limit, common output filter to keep responses tiny.
         # ``output`` must be a string ("extend" or comma-separated field list)
-        # per the FastMCP schema; passing a list trips Pydantic validation.
+        # per the MCPServer schema; passing a list trips Pydantic validation.
         return {"limit": 2, "output": "extend"} if n != "configuration_get" else {}
 
     if n == "apiinfo_version":
@@ -312,7 +312,7 @@ def build_args(tool_name: str, suite: Suite):
         return {"method": "apiinfo.version"}
     if n == "history_push":
         # Tool's typed signature has ``items`` as the top-level array
-        # (FastMCP-injected wrap turns the call into the right Zabbix
+        # (MCPServer-injected wrap turns the call into the right Zabbix
         # API shape underneath). One float value on our smoke item.
         if not cid.get("item"):
             return _SKIP("history_push needs the item fixture")
@@ -1444,10 +1444,13 @@ async def run_suite(url: str, token: str, server: str, report_path: str) -> int:
     suite = Suite(server=server, suffix=str(int(time.time())))
     headers = {"Authorization": f"Bearer {token}"}
     print(f"=== Connecting to {url} (target Zabbix: {server}) ===")
-    async with streamablehttp_client(url, headers=headers) as (r, w, _):
+    import httpx2
+    async with streamable_http_client(
+        url, http_client=httpx2.AsyncClient(headers=headers, timeout=60.0),
+    ) as (r, w):
         async with ClientSession(r, w) as s:
             init = await s.initialize()
-            print(f"  protocol: {init.protocolVersion}, server: {init.serverInfo.name} {init.serverInfo.version}")
+            print(f"  protocol: {init.protocol_version}, server: {init.server_info.name} {init.server_info.version}")
             tools = (await s.list_tools()).tools
             print(f"  registered tools: {len(tools)}")
 
