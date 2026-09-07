@@ -59,6 +59,21 @@ def _parse_timeout(raw) -> int:
     return v
 
 
+def _normalize_url(url: str) -> str:
+    """Normalise a Zabbix URL the way the config loader does.
+
+    The two sides of the drift check come from different places: this
+    page reads the raw TOML string, while ``live_config`` went through
+    the loader, which strips the trailing slash (``config.py``). Comparing
+    them unnormalised reports permanent drift for any URL written as
+    ``https://host/`` - and restarting cannot clear it, because the next
+    boot strips the slash again and the page compares the same two values
+    (reported by @G0nz0uk in #67: a restart banner that survived every
+    restart and appeared only on this page).
+    """
+    return (url or "").rstrip("/")
+
+
 def _render_servers_list(request: Request, admin_app, extra: dict | None = None) -> Response:
     """Render the /servers page. Shared by `servers_view` (GET) and
     `server_create` so that a validation failure on Add Server can
@@ -69,6 +84,7 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
     client_manager = admin_app.client_manager
     servers = []
     drift_detected = False
+    skipped_servers = client_manager.skipped_servers
 
     # Read config to get latest saved values (may differ from live)
     config_zabbix = {}
@@ -99,12 +115,21 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
         # Don't check live status here — it blocks page load.
         # Status will be loaded async via HTMX /servers/{name}/test
         config_changed = False
-        if name not in client_manager.server_names:
+        config_error = skipped_servers.get(name)
+        if config_error is not None:
+            # Section failed validation at boot and was SKIPPED. This
+            # is not restart-pending drift: restarting re-skips it and
+            # re-raises the banner forever (issue #61 - operator
+            # restarted in a loop). Show the validation error on the
+            # card instead and keep it out of drift_detected.
+            pass
+        elif name not in client_manager.server_names:
             # In config but not live — newly added (or renamed in),
             # not yet active.
             config_changed = True
             drift_detected = True
-        elif live_config and cfg.get("url") and cfg["url"] != live_config.url:
+        elif (live_config and cfg.get("url")
+                and _normalize_url(cfg["url"]) != _normalize_url(live_config.url)):
             config_changed = True
             drift_detected = True
 
@@ -114,6 +139,7 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
             "read_only": read_only,
             "verify_ssl": verify_ssl,
             "config_changed": config_changed,
+            "config_error": config_error,
             "is_live": name in client_manager.server_names,
         })
 
@@ -161,7 +187,11 @@ async def server_create(request: Request) -> Response:
 
     form = await request.form()
     name = str(form.get("name", "")).strip()
-    url = str(form.get("url", "")).strip()
+    # Normalised on the way in, so the value stored in config.toml is the
+    # one the loader will hand the running client. Tolerating the
+    # difference is the fix for #72; not writing it in the first place is
+    # what stops the mismatch existing at all.
+    url = _normalize_url(str(form.get("url", "")).strip())
     api_token = str(form.get("api_token", "")).strip()
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
@@ -283,7 +313,7 @@ async def server_edit(request: Request) -> Response:
         )
 
     new_name = str(form.get("name", "")).strip()
-    url = str(form.get("url", "")).strip()
+    url = _normalize_url(str(form.get("url", "")).strip())
     api_token = str(form.get("api_token", "")).strip()
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
