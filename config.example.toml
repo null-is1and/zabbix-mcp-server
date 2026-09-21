@@ -111,6 +111,15 @@ compact_output = true
 # built-in templates.
 # response_max_chars = 50000
 
+# How long (seconds) an MCP client may treat a tools/list response as
+# fresh. Sent as the 2026-07-28 `ttlMs` cache hint; the accompanying
+# `cacheScope` is always "private" because the catalog is filtered per
+# token. Default 300 (5 minutes). The catalog only changes on restart,
+# so caching saves re-sending ~100k tokens of tool schemas on every new
+# session. Set to 0 to disable client caching (always re-fetch); max
+# 86400. Pre-2026 clients ignore the field entirely.
+# tools_list_cache_ttl = 300
+
 # Allow stdio clients to pass `raw_json: true` and skip the
 # "[System: The following is raw data ...]" prompt-injection mitigation
 # preamble. Default: false. The flag exists for non-LLM stdio scripts
@@ -406,6 +415,79 @@ compact_output = true
 # # Lifetime overrides for this client only.
 # access_token_ttl_seconds = 1800
 # refresh_token_ttl_seconds = 604800
+
+# ---------------------------------------------------------------------------
+# Report delivery (optional)
+# ---------------------------------------------------------------------------
+# By default `report_generate` returns the PDF inline as a base64 data URI.
+# A big report can blow past an LLM's context window or a reverse-proxy read
+# timeout, so the report never arrives. These two channels hand the payload
+# over out of band instead, and the tool returns a short receipt (path or
+# recipients) rather than the document itself.
+#
+# Both are OFF by default and fenced by the operator: an AI client may ask
+# for delivery, but never decides where the file lands or who receives it.
+
+# [reporting]
+# Absolute path to a directory the server may write reports into. Required
+# before `save_to_file: true` works; the filename is generated server-side
+# and the resolved path is asserted to stay inside this directory.
+#
+# /var/lib/zabbix-mcp/reports is created by the installer (systemd
+# StateDirectory) and works out of the box. If you point this somewhere
+# else, add that path to the unit's ReadWritePaths - the service runs with
+# ProtectSystem=strict, so any other location is read-only no matter who
+# owns it:  systemctl edit zabbix-mcp-server
+# output_dir = "/var/lib/zabbix-mcp/reports"
+
+# Resource links (zabbix://reports/<id>) let report_generate hand the client
+# a pointer instead of a base64 blob, so the PDF never enters the model's
+# context. These two bound how long and how much is held in memory for that.
+# link_ttl = 3600           # seconds a link stays fetchable (60 - 86400)
+# link_max_reports = 20     # reports held at once; oldest evicted first (1 - 500)
+
+# Publish the same report at a plain HTTP(S) URL as well, so the AI can hand
+# the user a link they can click - a zabbix:// link only an MCP client can
+# open. The random report id in the path IS the credential (unguessable, one
+# report, dies with the link), so the route needs no bearer token.
+#
+# SET [server].public_url - without it there is usually no link. The URL is
+# only built from an address something vouched for: public_url, or
+# X-Forwarded-Host + X-Forwarded-Proto from a peer in trusted_proxies. The
+# local bind and a bare Host are never used: behind a proxy both read
+# 127.0.0.1, which would point a remote user at their own machine.
+# Behind a reverse proxy that forwards a LIST of paths rather than all of `/`,
+# forward /reports/ too, otherwise the link 404s:
+#   ProxyPass        /reports/ http://127.0.0.1:8080/reports/
+#   ProxyPassReverse /reports/ http://127.0.0.1:8080/reports/
+#
+# No URL is emitted on stdio transport - there is no HTTP listener - and the
+# resource link keeps working on every transport either way.
+# download_urls = true
+
+# [reporting.email]
+# SMTP settings for `email_to`. When enabled, smtp_host, from_address and
+# allowed_recipients are all required.
+# enabled = false
+# smtp_host = "smtp.example.com"
+# smtp_port = 587
+# smtp_user = ""                     # empty = no SMTP auth
+# smtp_password = "${SMTP_PASSWORD}" # ${ENV_VAR} expansion supported
+# from_address = "zabbix-mcp@example.com"
+# use_starttls = true                # STARTTLS on the plain port (587)
+# use_ssl = false                    # implicit TLS instead (465)
+# timeout = 30
+#
+# THE SAFETY FENCE. The AI client picks the recipient ("email the report to
+# petr@example.com"); this list decides how far it may reach:
+#   ["*@example.com"]      - the usual choice: any colleague, nobody outside
+#   ["ops@example.com"]    - one fixed mailbox only
+#   ["*"]                  - any address at all. Works, but a confused or
+#                            prompt-injected model could then mail monitoring
+#                            data outside the company.
+# An empty list means nothing can be mailed, and enabling email without a
+# list is refused at startup.
+# allowed_recipients = ["ops@example.com", "*@example.com"]
 
 # ---------------------------------------------------------------------------
 # Admin Portal

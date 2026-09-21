@@ -95,7 +95,7 @@ class ServerConfig:
     # Optional explicit Origin header allowlist for DNS rebinding protection
     # (MCP 2025-11-25 §security). When unset and `public_url` is configured,
     # the scheme://host[:port] derived from it is used. When unset on a
-    # localhost bind, FastMCP applies its own localhost wildcard defaults.
+    # localhost bind, MCPServer applies its own localhost wildcard defaults.
     # Wildcard ports work as ``http://example.com:*``. Same shape as
     # ``allowed_hosts`` but for the Origin header rather than Host.
     allowed_origins: list[str] | None = None
@@ -106,6 +106,14 @@ class ServerConfig:
     trusted_proxies: list[str] | None = None
     compact_output: bool = True
     response_max_chars: int = 50000
+    # Freshness hint (seconds) attached to tools/list results as the
+    # 2026-07-28 CacheableResult ``ttlMs``. The tool catalog only changes
+    # on a restart (or a token's scopes changing), so letting clients
+    # reuse it for a few minutes saves re-sending ~100k tokens of schema
+    # on every session. Scope is always "private" - the catalog is
+    # filtered per calling token, so a shared cache must never reuse it
+    # across authorizations. 0 disables caching (always re-fetch).
+    tools_list_cache_ttl: int = 300
     report_logo: str | None = None
     report_company: str = ""
     report_subtitle: str = "IT Monitoring Service"
@@ -116,6 +124,58 @@ class ServerConfig:
     # opt in here. HTTP transport uses the per-token ``allow_raw_json``
     # flag instead and ignores this setting.
     stdio_allow_raw_json: bool = False
+
+
+@dataclass(frozen=True)
+class ReportEmailConfig:
+    """SMTP settings for mailing generated PDF reports (issue #68).
+
+    Disabled by default. ``allowed_recipients`` is the safety fence:
+    an AI client may ask for a report to be mailed, but only to an
+    address the operator listed. Entries may glob a domain, e.g.
+    ``*@example.com``. An empty list permits nothing.
+    """
+
+    enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_address: str = ""
+    use_starttls: bool = True
+    use_ssl: bool = False
+    timeout: int = 30
+    allowed_recipients: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ReportingConfig:
+    """Out-of-band delivery for generated reports (issue #68).
+
+    A full PDF returned inline as base64 can exceed an LLM's context
+    window or a proxy's read timeout. With ``output_dir`` set, the
+    report can be written to disk instead and the tool returns just the
+    path. Empty (the default) keeps the tool read-only with respect to
+    the filesystem.
+    """
+
+    output_dir: str = ""
+    # How long a zabbix://reports/<id> link stays fetchable, in seconds.
+    # Long enough for the user to click through in the conversation,
+    # short enough that a forgotten report does not sit in RAM all day.
+    link_ttl: int = 3600
+    # Ceiling on concurrently held reports; the oldest is evicted first,
+    # because the report just generated matters more than one nobody
+    # fetched.
+    link_max_reports: int = 20
+    # Also hand out an https download URL next to the MCP resource link.
+    # zabbix://reports/<id> is only fetchable by an MCP client - a human
+    # reading the conversation cannot click it. The URL carries the same
+    # random 122-bit id as the resource and expires with it: a capability
+    # URL, deliberately usable without a bearer token so the operator can
+    # simply open it. Set false to hand out the MCP link only.
+    download_urls: bool = True
+    email: ReportEmailConfig = field(default_factory=ReportEmailConfig)
 
 
 @dataclass(frozen=True)
@@ -192,6 +252,13 @@ class AppConfig:
     zabbix_servers: dict[str, ZabbixServerConfig] = field(default_factory=dict)
     admin_ai: AdminAIConfig = field(default_factory=AdminAIConfig)
     oauth: OAuthConfig = field(default_factory=OAuthConfig)
+    reporting: ReportingConfig = field(default_factory=ReportingConfig)
+    # [zabbix.X] sections that failed validation at load time and were
+    # skipped (name -> human-readable reason). The admin portal shows
+    # these as "config error" instead of the misleading "needs restart"
+    # - a skipped section stays skipped no matter how often the
+    # operator restarts (issue #61).
+    skipped_zabbix_servers: dict[str, str] = field(default_factory=dict)
 
     @property
     def default_server(self) -> str | None:
@@ -492,7 +559,7 @@ def load_config(path: str | Path) -> AppConfig:
                     f"'allowed_origins' entry '{entry}' must start with http:// or https://"
                 )
             # Strip the ``:*`` port-wildcard before URL parsing; it is
-            # FastMCP-internal syntax that urlsplit otherwise rejects.
+            # MCPServer-internal syntax that urlsplit otherwise rejects.
             probe = entry[:-2] if entry.endswith(":*") else entry
             try:
                 parts = urlsplit(probe)
@@ -529,6 +596,12 @@ def load_config(path: str | Path) -> AppConfig:
     if not isinstance(response_max_chars_raw, int) or response_max_chars_raw < 5000:
         raise ConfigError("'response_max_chars' must be an integer >= 5000")
 
+    tools_cache_ttl_raw = server_raw.get("tools_list_cache_ttl", 300)
+    if not isinstance(tools_cache_ttl_raw, int) or tools_cache_ttl_raw < 0:
+        raise ConfigError("'tools_list_cache_ttl' must be an integer >= 0 (seconds; 0 disables client caching)")
+    if tools_cache_ttl_raw > 86400:
+        raise ConfigError("'tools_list_cache_ttl' must be <= 86400 (24 h)")
+
     server_config = ServerConfig(
         transport=transport,
         host=server_raw.get("host", "127.0.0.1"),
@@ -549,6 +622,7 @@ def load_config(path: str | Path) -> AppConfig:
         trusted_proxies=trusted_proxies,
         compact_output=compact_output_raw,
         response_max_chars=response_max_chars_raw,
+        tools_list_cache_ttl=tools_cache_ttl_raw,
         report_logo=server_raw.get("report_logo"),
         report_company=server_raw.get("report_company", ""),
         report_subtitle=server_raw.get("report_subtitle", "IT Monitoring Service"),
@@ -624,7 +698,76 @@ def load_config(path: str | Path) -> AppConfig:
         refresh_token_ttl_seconds=int(oauth_raw.get("refresh_token_ttl_seconds", 30 * 24 * 3600) or 30 * 24 * 3600),
     )
 
+    # ------------------------------------------------------------------
+    # [reporting] / [reporting.email] - out-of-band report delivery (#68)
+    # ------------------------------------------------------------------
+    reporting_raw = raw.get("reporting", {}) or {}
+    email_raw = reporting_raw.get("email", {}) or {}
+
+    output_dir = str(reporting_raw.get("output_dir", "") or "")
+    if output_dir:
+        output_dir = _resolve_env_vars(output_dir)
+        if not os.path.isabs(os.path.expanduser(output_dir)):
+            raise ConfigError(
+                "'[reporting].output_dir' must be an absolute path "
+                f"(got {output_dir!r})"
+            )
+
+    allowed_recipients_raw = email_raw.get("allowed_recipients", []) or []
+    if not isinstance(allowed_recipients_raw, list) or not all(
+        isinstance(r, str) for r in allowed_recipients_raw
+    ):
+        raise ConfigError("'[reporting.email].allowed_recipients' must be a list of strings")
+
+    email_enabled = bool(email_raw.get("enabled", False))
+    email_cfg = ReportEmailConfig(
+        enabled=email_enabled,
+        smtp_host=str(email_raw.get("smtp_host", "") or ""),
+        smtp_port=int(email_raw.get("smtp_port", 587) or 587),
+        smtp_user=str(email_raw.get("smtp_user", "") or ""),
+        smtp_password=_resolve_env_vars(str(email_raw.get("smtp_password", "") or "")),
+        from_address=str(email_raw.get("from_address", "") or ""),
+        use_starttls=bool(email_raw.get("use_starttls", True)),
+        use_ssl=bool(email_raw.get("use_ssl", False)),
+        timeout=int(email_raw.get("timeout", 30) or 30),
+        allowed_recipients=list(allowed_recipients_raw),
+    )
+    if email_enabled:
+        if not email_cfg.smtp_host:
+            raise ConfigError("'[reporting.email].smtp_host' is required when email is enabled")
+        if not email_cfg.from_address:
+            raise ConfigError("'[reporting.email].from_address' is required when email is enabled")
+        if not email_cfg.allowed_recipients:
+            raise ConfigError(
+                "'[reporting.email].allowed_recipients' must list at least one address "
+                "or pattern when email is enabled - without it an AI client could mail "
+                "monitoring data anywhere. Use e.g. [\"ops@example.com\"] or [\"*@example.com\"]."
+            )
+
+    link_ttl_raw = reporting_raw.get("link_ttl", 3600)
+    if not isinstance(link_ttl_raw, int) or not (60 <= link_ttl_raw <= 86400):
+        raise ConfigError(
+            "'[reporting].link_ttl' must be an integer between 60 and 86400 seconds"
+        )
+    link_max_raw = reporting_raw.get("link_max_reports", 20)
+    if not isinstance(link_max_raw, int) or not (1 <= link_max_raw <= 500):
+        raise ConfigError("'[reporting].link_max_reports' must be an integer between 1 and 500")
+
+    download_urls_raw = reporting_raw.get("download_urls", True)
+    if not isinstance(download_urls_raw, bool):
+        raise ConfigError("'[reporting].download_urls' must be a boolean (true or false)")
+
+    reporting_cfg = ReportingConfig(
+        output_dir=output_dir,
+        link_ttl=link_ttl_raw,
+        link_max_reports=link_max_raw,
+        download_urls=download_urls_raw,
+        email=email_cfg,
+    )
+
     return AppConfig(
         server=server_config, zabbix_servers=zabbix_servers,
         admin_ai=admin_ai, oauth=oauth_cfg,
+        skipped_zabbix_servers=dict(skipped_servers),
+        reporting=reporting_cfg,
     )
