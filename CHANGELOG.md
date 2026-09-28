@@ -1,5 +1,158 @@
 # Changelog
 
+## v1.36.1 - 2026-08-07
+
+One display bug, reported within hours of v1.36 by [@G0nz0uk](https://github.com/G0nz0uk).
+
+### Fixed
+
+- **"Restart needed" banner that never cleared, on servers whose URL ends in a slash** ([#72](https://github.com/initMAX/zabbix-mcp-server/issues/72), reported by [@G0nz0uk](https://github.com/G0nz0uk) in [#67](https://github.com/initMAX/zabbix-mcp-server/issues/67)). The `/servers` page recomputes configuration drift on every render and compared the URL from `config.toml` against the URL of the running client - but the two came from different places. The page read the raw TOML string, while the running value had been through the config loader, which normalises it with `url.rstrip("/")`. A URL written as `https://host/` therefore differed from itself, raising the banner on every render; restarting could not clear it, because the next boot normalised the URL again and the page compared the same two values. Both sides are now normalised the same way. A genuine edit - a different host, scheme or path - still raises the banner, as does adding a server to the config or removing a live one.
+
+  Nothing was ever actually wrong on an affected server; the banner was cosmetic. If you cannot upgrade yet, removing the trailing slash from the `url =` lines in `config.toml` has the same effect - the running server already treats it as absent.
+
+  Two related tidy-ups came out of reviewing it: the same raw-vs-normalised comparison existed on the dashboard (dead code today, since the status dots come from `/api/server-status`, but it would have reproduced the bug the moment anyone rendered it), and the Add Server / Edit Server forms now normalise the URL on the way in, so the mismatch is not merely tolerated but never written.
+
+  This is **not** the same bug as [#69](https://github.com/initMAX/zabbix-mcp-server/issues/69) in v1.35, which was OAuth client registration writing to `config.toml` at runtime. The reporter's data ruled that out: his config file was older than the running process and he had no `[oauth_clients.*]` sections at all.
+
+### Verified
+
+- 427 unit + e2e tests (two pre-existing macOS-only symlink failures aside), including 11 new ones that drive the real `_render_servers_list()` rather than a copy of its comparison - the bug was in where the two operands came from, so a test that re-implemented the check would have passed against the broken code. Confirmed to fail on the pre-fix code (3 of 9), while the six "a genuine change must still raise it" cases pass on both.
+- Reproduced end to end in the admin portal on a live server: with a trailing slash in the URL, v1.36 showed the banner, the header badge and a "Config changed" card on `/servers` (and a clean dashboard until that page was opened); with the fix and the slash still in place, four consecutive renders stayed clean; changing the URL to a genuinely different host raised all three again immediately.
+- CRUD smoke against live Zabbix; installer matrix 18/18.
+
+## v1.36 - 2026-08-07
+
+Report delivery, finished: v1.35 could not actually write to disk, and the link it handed back was one an MCP client could open but a person could not.
+
+> **Behaviour change.** `report_generate` now answers with a link by default instead of an inline base64 PDF, so the return shape changed: callers that read `summary["report"]` (`data:application/pdf;base64,...`) get a resource link and a `download_url` instead. Pass `as_link: false` for the old inline payload, which still applies the `[server].response_max_chars` ceiling. This is why the release is v1.36 and not a patch on v1.35.
+
+### Fixed
+
+- **`save_to_file` could never succeed on a default install.** The service runs with `ProtectSystem=strict`, which makes the entire filesystem read-only apart from an explicit allowlist - so `[reporting].output_dir` failed with `Read-only file system` no matter who owned the directory, and the directory did not exist in the first place. The unit now declares `StateDirectory=zabbix-mcp/reports` (mode 0750), which creates it, chowns it to the service user and makes it writable; `config.example.toml` documents that pointing `output_dir` elsewhere needs a matching `ReadWritePaths`.
+
+### Added
+
+- **A report link a human can click.** `zabbix://reports/<id>` can only be opened by an MCP client, so the person reading the chat was left with nothing to click. When the server runs over HTTP the same report is now also published at `GET /reports/<id>.pdf` and the tool returns it as `download_url` alongside the resource link. The 122-bit random report id (uuid4) is the credential - a capability URL: unguessable, valid for one report, and dead the moment the link expires. The route deliberately needs no bearer token (that is the point of handing it to a person) and answers with `Content-Disposition: attachment`, `Cache-Control: no-store, private`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options: nosniff`. Turn it off with `[reporting].download_urls = false`.
+
+  **Behind a reverse proxy that forwards a list of paths rather than all of `/`, add `/reports/` to it** - otherwise the link looks perfectly correct and answers 404. README, `docs/OAUTH.md` and `config.example.toml` all call this out.
+
+  **Upgrade note:** this is on by default, so a 1.35 install that already serves HTTP starts publishing report downloads at `/reports/<id>.pdf` after the update, with no config change. The route is unauthenticated by design (the id is the credential). Set `[reporting].download_urls = false`, or untick **Settings -> Report Delivery -> Clickable download link**, to keep MCP resource links only.
+
+- Links are now the **default** answer for `report_generate` rather than something the client has to ask for with `as_link: true` (see the note above), and the tool description tells the model to pass the download URL on instead of trying to render the document.
+
+### Fixed (edge cases in the above)
+
+- **Nothing about the link is inferred.** The URL is built only from `[server].public_url`, or from `X-Forwarded-Host` + `X-Forwarded-Proto` sent by a peer in `[server].trusted_proxies`. Neither the local bind nor a bare `Host` header is used: the shipped default binds `127.0.0.1` behind a reverse proxy, and with no host allowlist configured the MCP SDK rejects any non-loopback `Host` anyway, so both read `127.0.0.1` in exactly the deployment where a link matters - handing a remote user `http://127.0.0.1:8080/reports/<id>.pdf`, a dead link that also sends a live report id to whatever answers on *their* port 8080. A forwarded value is accepted only as a bare authority, so no header can smuggle a path or a second origin into the link, and the *last* element of a chain is taken because a proxy that appends leaves the client's own value in front.
+- No URL is emitted when none can be built honestly: **stdio has no HTTP listener at all**, and an unproxied server without `public_url` has nothing vouching for its address. Both return a `download_url_unavailable` line naming what to configure; the resource link keeps working on every transport.
+- The effective transport is used rather than the configured one, because `--transport` overrides `config.toml`.
+- `[server].trusted_proxies` entries are now matched as addresses or networks rather than by string equality, so `10.0.0.0/24` and any spelling of an IPv6 address actually match the peer. Previously both were silently ignored, which weakened the token IP allowlist and would now also have suppressed download links; an entry that is neither address nor network logs a warning and keeps its old literal behaviour.
+- Serving download URLs over plaintext HTTP logs a startup warning, and enabling them without `public_url` logs one too: the report id travels as a bearer credential and the PDF is unencrypted in transit.
+
+### Fixed (internal)
+
+- `report_generate` base64-encoded the whole PDF on every call - including the link path that discards the string - allocating ~1.37x the file and blocking the event loop for the duration. The inline-size check now computes the encoded length arithmetically and the encode happens only when the PDF is actually returned inline.
+- The report id was documented as 128-bit in `SECURITY.md`, `README.md` and the config comments. `uuid4().hex` is 122 random bits (6 are fixed for version and variant) - ample, but a security document should not overstate it.
+
+### Verified
+
+- 416 unit + e2e tests (two pre-existing macOS-only symlink failures aside), including 21 new cases across two files: the URL builder (stdio, nothing vouched for, forwarded chains, IPv6 literals, values carrying a path/query/CRLF) and the request-context middleware driven as itself - trusted-proxy CIDR and IPv6 matching, an untrusted peer's `X-Forwarded-*` being ignored, the context not surviving the request, and two interleaved requests never seeing each other's value
+- End to end on a live server: the exact `download_url` returned by `report_generate` fetched over HTTPS as a valid PDF with every security header present, and the same tool over stdio returning no URL plus the explanation
+- Reproduced the `ProtectSystem=strict` failure with `systemd-run` before the fix and confirmed the write succeeds after it
+
+## v1.35 - 2026-08-07
+
+Two operator-visible bug fixes plus a reporting feature for deployments where a full PDF cannot travel back through the MCP channel.
+
+### Added
+
+- **Report delivery that keeps the PDF out of the context window** ([#68](https://github.com/initMAX/zabbix-mcp-server/issues/68), requested by [@metehan25](https://github.com/metehan25)). A comprehensive report returned inline as a base64 data URI can exceed the LLM's context window or a reverse-proxy read timeout, so it never arrives at all.
+
+  **Resource links are the primary answer.** `report_generate` can hand back a pointer (`zabbix://reports/<id>`) plus a one-line summary instead of the document; the client fetches the bytes over `resources/read` only when the user actually wants the file, so the PDF never enters the conversation. Ask for it with `as_link: true` - and it now happens **automatically** when the inline payload would exceed `[server].response_max_chars`, which is exactly the case that used to fail. Links live for an hour in a capped in-memory store; both the lifetime and the cap are configurable in the admin portal (`[reporting].link_ttl`, `link_max_reports`).
+
+  Two further channels move the file out of the conversation entirely, answering with a receipt (path / recipients / size):
+  - `save_to_file: true` writes the PDF into `[reporting].output_dir`. The filename is generated server-side from report type, host group and timestamp, and the resolved path is asserted to stay inside the configured directory.
+  - `email_to: "ops@example.com"` mails it as an attachment using `[reporting.email]` - the fallback for "send it to a person, not a chat".
+
+  Both are off until the operator configures them, and the AI client asks for delivery without choosing the destination. Email additionally requires `allowed_recipients` - an exact address, a `*@domain` glob for a whole company, or `*` for no restriction at all - and the config parser refuses to enable email without it, because otherwise a model could mail monitoring data to any address it invents. 25 MB attachment ceiling; SMTP failures are surfaced without credentials. Asking for a channel the operator has not enabled returns a plain explanation of what is missing.
+
+- **Report delivery is configured in the admin portal**, not by hand-editing `config.toml`: Settings gains a **Report Delivery** section with the output directory, the resource-link lifetime and cap, and the full SMTP block including the recipient allowlist. Paths are validated on submit (absolute, exists, writable) and email cannot be enabled without an allowlist, so a typo cannot brick the next start. The SMTP password is never sent back to the browser - blank means "keep the stored one", as with the AI key.
+
+### Fixed
+
+- **OAuth client registration raised a false "restart needed" banner** ([#69](https://github.com/initMAX/zabbix-mcp-server/issues/69), surfaced by [@G0nz0uk](https://github.com/G0nz0uk) in #67). Dynamic client registration appends an `[oauth_clients.<id>]` section to `config.toml` at runtime so the client survives the next boot. The admin portal's drift detector compared the file against the snapshot taken at startup, concluded the configuration had changed, and asked for a restart - even though the running provider already held that client in memory. Restarting helped only until the next client registered or reconnected, so the banner kept coming back. The registration path now refreshes the baseline; a change the running process has *not* absorbed still raises the banner as before.
+- **`install.sh update` silently pinned to a deleted branch** ([#60](https://github.com/initMAX/zabbix-mcp-server/issues/60)). The update path fetched without `--prune`, so a checkout left on a branch that had been merged and deleted upstream kept resetting to the last cached commit of that dead branch while reporting success - operators stayed on an old version with no visible error. Now the fetch prunes, a missing remote branch is reported plainly, and the update falls back to `origin/main`.
+
+### Security
+
+- `SECURITY.md` gains a **Report Delivery** section documenting the fences on all three channels: unguessable random link ids served over the authenticated MCP endpoint with a bounded store, server-generated filenames with the resolved path confined to the configured directory, and the mandatory recipient allowlist that stops an AI client from turning email into an exfiltration path for monitoring data.
+
+### Fixed (internal)
+
+- `_register_tools()` dereferenced `config.server` while `config` is optional on that entry point, so the whole tool registration raised `AttributeError` once the `reporting` extra was installed. The reporting block is now skipped when no config was passed.
+- The resource handler reached the report store through a module-level global, which two servers in one process would have shared. Registration now happens in the scope that owns the store.
+
+### Verified
+
+- 394 unit + e2e tests; CRUD smoke against live Zabbix 7.4; installer matrix 18/18
+- Report delivery exercised end to end against a live Zabbix: a real availability report returned as a resource link and fetched back as a valid 37 KB PDF, the same report written to disk, and mailed through a real SMTP dialog with the attachment verified byte for byte
+- Admin portal walked in a browser: every form saves into the right TOML table, the resulting config passes `--check-config`, and the guards refuse a bad save with an explanation (empty allowlist, out-of-range link lifetime)
+- A new contract test pins that anything the Settings form can write still parses at boot - the failure mode a UI-configured feature has to be protected from
+
+## v1.34 - 2026-08-04
+
+**MCP 2026-07-28 protocol support.** The server now answers both the new stateless revision and every earlier one from a single endpoint - existing clients (Claude Desktop, claude.ai connectors, ChatGPT custom apps, MCP Inspector) keep working unchanged, no config edits, no reconnect required.
+
+### Added
+
+- **MCP 2026-07-28 revision** ([#64](https://github.com/initMAX/zabbix-mcp-server/issues/64)). The July 2026 spec makes MCP stateless: no `initialize` handshake, no `Mcp-Session-Id`, every request carries its protocol version, client info and capabilities in `_meta`. Upgrading to the 2.x MCP SDK brings dual-revision serving - a 2026-07-28 client and a 2025-11-25 client can talk to the same endpoint at the same time, each getting the transport it expects. `server/discover` (the new up-front capability probe) is served automatically.
+- **`io.modelcontextprotocol/tasks` extension.** The experimental Tasks API used for long-running `report_generate` calls moved out of the core protocol into an official extension and was redesigned: a `tools/call` carrying `task: {...}` returns immediately with the task handle in the result `_meta`, the client polls `tasks/get`, then pulls the payload from `tasks/result`; `tasks/cancel` now actually stops work in flight. The bounded store keeps its guard rails (default TTL 1 h, 24 h ceiling, capped live tasks with a retryable error). `tasks/list` is gone per the redesign.
+- **`[server].tools_list_cache_ttl`** (seconds, default 300, `0` disables, max 86400) - sets the `ttlMs` freshness hint on `tools/list` results. With 237 tools the catalog is roughly 100k tokens of schema; letting clients reuse it for a few minutes cuts that off every new session. `cacheScope` is pinned to `private` because the catalog is filtered per token, so a shared cache can never serve one token's catalog to another. Pre-2026 clients ignore both fields.
+- **`Mcp-Method` / `Mcp-Name` request headers** are honoured on Streamable HTTP POSTs. Beyond spec compliance this is an operational win: an L7 firewall or reverse proxy can now allow or deny individual MCP methods and tool names without parsing the JSON-RPC body.
+- **README gains an "MCP Protocol Compatibility" section** listing every negotiable revision and the two operator-visible knobs above.
+
+### Security
+
+- **RFC 9207 issuer identification** ([SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)). The `/authorize` response now carries `iss=<public_url>` next to `code` and `state`, so a client can verify the authorization code came from the authorization server it started the flow with - closing the classic AS mix-up hole. Clients that do not know the parameter ignore it.
+
+### Changed
+
+- Minimum MCP SDK is now `mcp>=2.0.0`. Python floor is unchanged (3.10+), so every OS in the installer matrix stays supported. Note for custom container images: the SDK's new HTTP client uses the **system CA store** instead of a bundled `certifi`, so an image stripped of `ca-certificates` will fail TLS to Zabbix - the shipped Dockerfile is unaffected.
+- Internals renamed from `FastMCP` to `MCPServer` following the SDK.
+
+### Verified
+
+- Full test suite (361 tests) with zero regressions, including a new dual-generation e2e suite that drives one live server with both a legacy handshake client and a stateless 2026-07-28 client and asserts both see an identical tool catalog
+- CRUD smoke against live Zabbix 7.4: 255/261, exactly the pre-upgrade baseline
+- Real AI clients against a real deployment: Claude Code CLI (read and write round trips) and the claude.ai connector (OAuth reconnect, consent screen, live chat answering from `infrastructure_summary_get`)
+- New-protocol path verified on the same deployment: stateless `tools/list`, `server/discover`, a live tool call, and the full task lifecycle
+
+
+## v1.33 - 2026-07-31
+
+Patch release. One admin-portal bug fixed; no new features. The v2.0 feature train (LDAP/SAML SSO, plugin loader, tool-level audit log, SIEM forwarder, /metrics) continues on the `release/v2.0.0` branch.
+
+### Fixed
+
+- **Endless "Configuration changes are pending. The MCP server must be restarted" loop** (#61, reported by [@G0nz0uk](https://github.com/G0nz0uk)). Since the resilience change that skips an invalid `[zabbix.X]` section at boot instead of taking the whole MCP down, a section that fails validation (bad URL, missing token, unresolvable `${ENV_VAR}`) is invisible to the runtime but still present in `config.toml`. The admin portal interpreted that permanent gap as "in config but not live yet" on two surfaces: the dashboard showed the server as pending, and the /servers page re-armed the global restart banner on **every** page render - so even after a restart cleared it, the first visit to /servers raised it again. Operators restarted in a loop; restarting can never load a section that fails validation.
+
+  The config loader now records skipped sections with their validation reasons, and the admin portal says what is actually wrong: the /servers card gets a red "Config error" badge, the exact validation message, and an explicit "restarting will not load it - fix the section" note; the dashboard card shows "config error" with the reason in the tooltip; `/api/server-status` reports `status: "config_error"`. Skipped sections are excluded from restart-drift detection, so the banner no longer resurrects itself.
+
+### Thanks
+
+Thanks to [@G0nz0uk](https://github.com/G0nz0uk) for reporting #61 with screenshots and for patiently confirming that the restart loop survived every restart - the "restart does not clear it" detail is what pointed away from state handling and straight at the drift detector.
+
+## v1.32 - 2026-07-09
+
+Patch release. One bug fixed; no new features. The v2.0 feature train (LDAP/SAML SSO, plugin loader, tool-level audit log, SIEM forwarder, /metrics) continues on the `release/v2.0.0` branch.
+
+### Fixed
+
+- **`infrastructure_summary_get` returned `host_count` / `enabled_host_count` / `item_count` / `trigger_count` / `template_count` as 0** (#54, reported by [@scotttouzet-secvis](https://github.com/scotttouzet-secvis)). The tool requested the counts with `output="count"`, which is not a valid Zabbix API parameter value - every supported Zabbix version silently ignores it and returns a list of id objects, which the counting helper quietly converted to 0. The severity breakdown and top-hosts fields in the same response were computed through `problem.get` with `output="extend"`, which is why they looked correct while the counts did not. The helper now uses the documented `countOutput: true`. Verified live before/after on Zabbix 6.0.47, 7.0.26 and 7.4.8; a regression test emulates the real API semantics (list for `output=count`, string count for `countOutput`) and guards that the invalid parameter cannot come back.
+
+### Thanks
+
+Big thanks to [@scotttouzet-secvis](https://github.com/scotttouzet-secvis) for the exemplary bug report on #54 - the "counts are zero but the problem data in the same response is right, and a manual `host_get` with `countOutput` works" observation, with permissions already ruled out, pointed straight at the root cause and cut the diagnosis time to minutes.
+
 ## v1.31 - 2026-06-03
 
 Patch release. Two operator-impacting bugs fixed; no new features. Everything else queued for the v2.0 cut (LDAP/SAML SSO, plugin loader runtime, tool-level audit log, SIEM forwarder, /metrics Prometheus endpoint) stays on the `release/2.0.0` branch.
