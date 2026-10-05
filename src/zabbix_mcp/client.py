@@ -178,6 +178,16 @@ class ClientManager:
         return list(self._config.zabbix_servers.keys())
 
     @property
+    def skipped_servers(self) -> dict[str, str]:
+        """[zabbix.X] sections skipped at config load (name -> reason).
+
+        Empty on configs where every section validated. The admin
+        portal uses this to show "config error" instead of a
+        restart-cannot-fix-it "pending" state (issue #61).
+        """
+        return dict(getattr(self._config, "skipped_zabbix_servers", {}) or {})
+
+    @property
     def default_server(self) -> str | None:
         return self._config.default_server
 
@@ -200,13 +210,40 @@ class ClientManager:
         # 300 s default matches Zabbix PHP frontend's max_execution_time
         # so expensive exports / long history.get ranges can complete.
         timeout = getattr(srv, "request_timeout", 300) or 300
+        # zabbix-utils refuses anything below its __min_supported__ (6.0)
+        # unless told not to. That gate is relaxed ONLY for an entry the
+        # operator marked legacy_auth - the whole point of that flag is
+        # Zabbix 5.0-5.2 - and never widened for token auth, which keeps
+        # the operator-controlled skip_version_check as before.
+        legacy = getattr(srv, "legacy_auth", False)
         api = ZabbixAPI(
             url=srv.url,
             ssl_context=_build_ssl_context(srv.verify_ssl),
-            skip_version_check=srv.skip_version_check,
+            skip_version_check=srv.skip_version_check or legacy,
             timeout=timeout,
         )
-        api.login(token=srv.api_token)
+        if legacy:
+            # Hard version lock. Password login exists for releases that
+            # have no API tokens; on anything that has them it is just a
+            # password in a config file for no reason. The constructor
+            # has already fetched apiinfo.version, so this costs nothing.
+            if api.version >= 5.4:
+                raise ValueError(
+                    f"Zabbix server '{name}' reports version {api.version}, which "
+                    f"supports API tokens. 'legacy_auth' is only accepted for "
+                    f"Zabbix 5.0-5.2 - remove it and configure 'api_token'."
+                )
+            logger.warning(
+                "Zabbix server '%s' (Zabbix %s) uses LEGACY password login. This "
+                "Zabbix release is out of upstream support and the server holds a "
+                "user password instead of a revocable API token. Treat this entry "
+                "as a security risk and plan the upgrade.%s", name, api.version,
+                (" The URL is plain http://, so the password crosses the network "
+                 "in clear text on every login.") if srv.url.startswith("http://") else "",
+            )
+            api.login(user=srv.username, password=srv.password)
+        else:
+            api.login(token=srv.api_token)
 
         version = api.api_version()
         logger.info("Connected to '%s' - Zabbix %s", name, version)
@@ -365,7 +402,7 @@ class ClientManager:
         return obj(**params)
 
     def check_connection(self, server: str) -> dict:
-        """Verify connectivity and token auth to a Zabbix server.
+        """Verify connectivity and auth (API token or user/password) to a Zabbix server.
 
         Returns dict with 'api_ok' and 'token_ok' status.
         Raises on connection failure.
