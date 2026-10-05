@@ -33,7 +33,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label class="form-label">Server Name <span class="tooltip-icon" tabindex="0" data-tooltip="Identifier used as the `server` argument in MCP tool calls. Letters, digits, dashes, underscores. Must start with a letter. Can be renamed later (token allowed_servers references update automatically).">&#x1F6C8;</span></label>
-            <input type="text" name="name" class="form-input" placeholder="e.g. production, staging" required pattern="[a-zA-Z][a-zA-Z0-9_-]*" value="{{ form_name | default('') }}"
+            <input type="text" name="name" class="form-input" placeholder="e.g. production, staging" required pattern="[a-zA-Z][a-zA-Z0-9_\-]*" value="{{ form_name | default('') }}"
                    data-existing-names='{{ existing_server_names | default([]) | tojson }}'>
             <small class="text-muted">Identifier used in MCP tool calls (letters, numbers, dashes)</small>
         </div>
@@ -41,10 +41,34 @@
             <label class="form-label">Zabbix URL <span class="tooltip-icon" tabindex="0" data-tooltip="Full https://host[:port]/zabbix path to the Zabbix frontend. The MCP server appends /api_jsonrpc.php for API calls. Test Connection probes this URL.">&#x1F6C8;</span></label>
             <input type="url" name="url" class="form-input" placeholder="https://zabbix.example.com" required value="{{ form_url | default('') }}">
         </div>
+        <div class="form-group" id="add-token-group">
+            <label class="form-label">API Token <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix API token (User settings -> API tokens in the Zabbix UI). Must have permissions for the actions the AI client will perform. Required unless Legacy auth is enabled below.">&#x1F6C8;</span></label>
+            <input type="text" name="api_token" id="add-token" class="form-input" placeholder="Zabbix API token" value="{{ form_api_token | default('') }}">
+            <small id="add-token-hint" class="text-muted" style="display:none; color:var(--color-danger);">&#x26A0;&#xFE0F; Not used &mdash; Legacy auth is enabled; the server signs in with the username and password below.</small>
+            <small id="add-token-help" class="text-muted">Create in Zabbix: User settings &rarr; API tokens.</small>
+        </div>
         <div class="form-group">
-            <label class="form-label">API Token <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix API token (User settings -> API tokens in the Zabbix UI). Must have permissions for the actions the AI client will perform.">&#x1F6C8;</span></label>
-            <input type="text" name="api_token" class="form-input" placeholder="Zabbix API token" required value="{{ form_api_token | default('') }}">
-            <small class="text-muted">Create in Zabbix: User settings &rarr; API tokens</small>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="legacy_auth" id="add-legacy" onchange="_toggleLegacy('add')" {% if form_legacy_auth %}checked{% endif %}> Legacy auth (Zabbix 5.0 / 5.2 only) <span class="tooltip-icon" tabindex="0" data-tooltip="Only for Zabbix 5.0 and 5.2, which have no API tokens. Refused against Zabbix 5.4 or newer, and refused together with an API token.">&#x1F6C8;</span>
+            </label>
+        </div>
+        <div id="add-legacy-box" style="{% if not form_legacy_auth %}display:none;{% endif %} border:2px solid var(--color-danger); border-radius:var(--radius-md); background:rgba(239,68,68,0.08); padding:12px 16px; margin-bottom:12px;">
+            <div style="color:var(--color-danger); font-weight:600; margin-bottom:6px;">&#x26A0;&#xFE0F; Unsupported Zabbix version &middot; security risk</div>
+            <div class="text-sm" style="margin-bottom:10px;">
+                Zabbix 5.0 and 5.2 are <strong>out of upstream support</strong> and have no API tokens. With this enabled the MCP server stores a
+                <strong>user password</strong> instead of a revocable, scoped token. This path is best effort and outside our test matrix.
+                The fix is upgrading Zabbix; until then use a dedicated low-privilege user, keep <strong>Read-only</strong> on, and prefer
+                <code>${ENV_VAR}</code> for the password. The server refuses this login against Zabbix 5.4 or newer.
+            </div>
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" id="add-user" class="form-input" placeholder="e.g. zabbix-mcp" value="{{ form_username | default('') }}" autocomplete="off">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" id="add-pass" class="form-input" placeholder="Password or ${ENV_VAR}" value="" autocomplete="new-password">
+                <small class="text-muted">Not shown again after saving. If the form reloads with an error, type it again.</small>
+            </div>
         </div>
         <div class="form-group" style="display:flex; gap:24px;">
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" tabindex="0" data-tooltip="When checked, MCP tools that mutate Zabbix data (host_create, item_update, ...) are blocked at the server level. Recommended for production: leave checked and grant per-token write scope only when needed.">
@@ -67,6 +91,21 @@
         </div>
     </form>
     <script>
+    function _toggleLegacy(prefix) {
+        var on = document.getElementById(prefix + '-legacy').checked;
+        document.getElementById(prefix + '-legacy-box').style.display = on ? '' : 'none';
+        // The token is not used while legacy auth is on: grey it out and
+        // say so, instead of leaving two live-looking credential fields.
+        var tok = document.getElementById(prefix + '-token');
+        var hint = document.getElementById(prefix + '-token-hint');
+        var wrap = document.getElementById(prefix + '-token-group');
+        if (tok) { tok.disabled = on; if (on) { tok.value = ''; } }
+        if (hint) { hint.style.display = on ? '' : 'none'; }
+        var help = document.getElementById(prefix + '-token-help');
+        if (help) { help.style.display = on ? 'none' : ''; }
+        if (wrap) { wrap.style.opacity = on ? '0.5' : ''; }
+    }
+    document.addEventListener('DOMContentLoaded', function () { _toggleLegacy('add'); });
     function _setTestResult(container, dotClass, text) {
         // Safe DOM construction — no innerHTML from server responses
         container.textContent = '';
@@ -90,7 +129,7 @@
             _setTestResult(container, 'status-dot-green', 'Connected' + (ver ? ' — Zabbix ' + ver : ''));
             return true;
         } else if (doc.querySelector('.status-dot-yellow')) {
-            _setTestResult(container, 'status-dot-yellow', 'API online — Token invalid or expired');
+            _setTestResult(container, 'status-dot-yellow', 'API online — Invalid credentials');
             return false;
         } else if (doc.querySelector('.status-dot-red')) {
             var errSpan = doc.querySelector('span[style*="color:var(--color-danger)"]');
@@ -115,6 +154,9 @@
         }
         var url = form.querySelector('[name=url]').value;
         var token = form.querySelector('[name=api_token]').value;
+        var username = form.querySelector('[name=username]').value;
+        var password = form.querySelector('[name=password]').value;
+        var legacy = form.querySelector('[name=legacy_auth]').checked ? '1' : '0';
         var ssl = form.querySelector('[name=verify_ssl]').checked;
         var result = document.getElementById('add-test-result');
         var btn = document.getElementById('add-save-btn');
@@ -126,7 +168,12 @@
         fetch('/servers/test-new', {
             method: 'POST',
             headers: _headers,
-            body: 'url=' + encodeURIComponent(url) + '&api_token=' + encodeURIComponent(token) + '&verify_ssl=' + (ssl ? '1' : '0'),
+            body: 'url=' + encodeURIComponent(url)
+                + '&api_token=' + encodeURIComponent(token)
+                + '&username=' + encodeURIComponent(username)
+                + '&password=' + encodeURIComponent(password)
+                + '&legacy_auth=' + legacy
+                + '&verify_ssl=' + (ssl ? '1' : '0'),
         })
         .then(function(r) { return r.text(); })
         .then(function(html) {
@@ -162,6 +209,12 @@
                 {% if server.config_changed %}
                 <span class="badge badge-warning">⚠️ Config changed</span>
                 {% endif %}
+                {% if server.config_error %}
+                <span class="badge badge-danger">✖ Config error</span>
+                {% endif %}
+                {% if server.legacy_auth %}
+                <span class="badge badge-danger" tabindex="0" data-tooltip="Legacy password login for Zabbix 5.0 / 5.2 - unsupported Zabbix version, security risk. The MCP server holds a user password instead of a revocable token. Best effort, not in our test matrix. Plan the upgrade.">&#x26A0;&#xFE0F; Legacy auth</span>
+                {% endif %}
             </div>
         </div>
 
@@ -174,7 +227,10 @@
                   hx-trigger="load"
                   hx-swap="innerHTML"
                   {% endif %}>
-                {% if server.config_changed %}
+                {% if server.config_error %}
+                <span class="status-dot" style="background: var(--color-danger);"></span>
+                <span class="text-danger">Not loaded - configuration invalid</span>
+                {% elif server.config_changed %}
                 <span class="status-dot status-dot-pulse" style="--pulse-color: var(--color-warning);"></span>
                 <span class="text-muted">Restart required</span>
                 {% else %}
@@ -183,6 +239,15 @@
                 {% endif %}
             </span>
         </div>
+
+        {% if server.config_error %}
+        <div class="server-card-error text-sm text-danger" style="margin-top: 8px;">
+            This server was skipped at startup and restarting will not load it.
+            Fix the problem below in the <code>[zabbix.{{ server.name }}]</code>
+            section (Edit), then restart:<br>
+            <strong>{{ server.config_error }}</strong>
+        </div>
+        {% endif %}
 
         {% if server.error %}
         <div class="server-card-error text-sm text-danger" style="margin-top: 8px;">
