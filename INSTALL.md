@@ -9,7 +9,7 @@ Two ways to deploy the Zabbix MCP Server: **on-prem** (systemd service) or **Doc
 Both methods require:
 
 - Network access to your Zabbix server(s)
-- A [Zabbix API token](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens) (created in Zabbix frontend: **Users → API tokens → Create API token**)
+- A Zabbix [API token](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens), created in the frontend: **Users → API tokens → Create API token**. (Zabbix 5.0 and 5.2 have no API tokens; for those two releases only there is an explicit, warned-about legacy password login - see the README section *Legacy auth* before using it)
 
 ## Option 1: On-Prem Installation (systemd)
 
