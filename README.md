@@ -21,7 +21,8 @@
     <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-blue">&nbsp;
     <img alt="Tools" src="https://img.shields.io/badge/tools-237-green">&nbsp;
     <img alt="Zabbix" src="https://img.shields.io/badge/zabbix-5.0%E2%80%948.0-red">&nbsp;
-    <a href="https://safeskill.dev/scan/initmax-zabbix-mcp-server"><img alt="SafeSkill" src="https://img.shields.io/badge/SafeSkill-100%2F100_Verified%20Safe-brightgreen"></a>
+    <a href="https://safeskill.dev/scan/initmax-zabbix-mcp-server"><img alt="SafeSkill" src="https://img.shields.io/badge/SafeSkill-100%2F100_Verified%20Safe-brightgreen"></a>&nbsp;
+    <a href="https://mcptoplist.com/server/glama%2FinitMAX%2Fzabbix-mcp-server"><img alt="MCP Toplist" src="https://mcptoplist.com/badge/glama%2FinitMAX%2Fzabbix-mcp-server.svg"></a>
 </div>
 <br>
 <br>
@@ -83,7 +84,7 @@ Done. The server is running on `http://127.0.0.1:8080/mcp`.
 
 - Linux server with Python 3.10+
 - Network access to your Zabbix server(s)
-- Zabbix API token ([User settings > API tokens](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens))
+- A Zabbix **API token** ([User settings > API tokens](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens)). Zabbix 5.0 and 5.2 have no API tokens; for those two releases only, an explicit legacy password login exists - see [Legacy auth](#legacy-auth-zabbix-50-and-52-only) and read the warning there first
 
 ### Install
 
@@ -192,6 +193,7 @@ url = "https://zabbix.example.com"
 api_token = "your-api-token"
 read_only = true
 verify_ssl = true
+
 ```
 
 All available options with detailed descriptions are documented in [`config.example.toml`](config.example.toml).
@@ -210,7 +212,7 @@ The config file contains **two different types of tokens** that serve different 
                                     └──────────────────┘
 ```
 
-**`api_token`** (in `[zabbix.*]`) — **required** — authenticates the MCP server to your Zabbix instance. This is a [Zabbix API token](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens) that you create in the Zabbix frontend.
+**`api_token`** (in `[zabbix.*]`) — authenticates the MCP server to your Zabbix instance. This is a [Zabbix API token](https://www.zabbix.com/documentation/current/en/manual/web_interface/frontend_sections/users/api_tokens) that you create in the Zabbix frontend. It is **required**. The only exception is the explicit legacy password login for Zabbix 5.0 and 5.2 - see [Legacy auth](#legacy-auth-zabbix-50-and-52-only).
 
 How to create one:
 
@@ -228,6 +230,40 @@ The token inherits the permissions of the Zabbix user it belongs to:
 | Complete API access (users, settings, global scripts) | **Super admin** role | `false` |
 
 Use the principle of least privilege — create a dedicated Zabbix user for the MCP server with only the permissions it needs.
+
+#### Legacy auth (Zabbix 5.0 and 5.2 only)
+
+> **Read this before enabling it.** Zabbix 5.0 and 5.2 are **out of upstream support** and have **no API tokens** - they were introduced in 5.4. The only way in is a username and password, which means this server holds a **user password** in its configuration instead of a revocable, scoped token. That is a security risk you are choosing to carry, and this project treats the whole path as **best effort**: it is not in our test matrix and we cannot verify it against a live 5.x. The right fix is upgrading Zabbix. If you cannot yet, this exists so you are not locked out in the meantime.
+
+It has to be switched on explicitly. A `username`/`password` pair without the flag is a configuration error, not a fallback:
+
+```toml
+[zabbix.old-prod]
+url = "https://zabbix5.example.com"
+legacy_auth = true                   # the switch - Zabbix 5.0 / 5.2 only
+username = "zabbix-mcp"              # dedicated low-privilege account
+password = "${ZABBIX_OLD_PASSWORD}"  # keep it in the environment, not the file
+read_only = true
+```
+
+Rules the server enforces:
+
+- `legacy_auth = true` and `api_token` on the same entry is refused - one credential per server, nothing inferred.
+- `username`/`password` without `legacy_auth = true` is refused.
+- **Version lock:** on connect the server reads `apiinfo.version` and refuses legacy login against anything **5.4 or newer**. On a current Zabbix the flag does nothing except fail loudly, so it cannot be used to avoid tokens where they exist.
+- Every start logs a `WARNING` for each legacy entry naming the Zabbix version, so the choice stays visible in the operational log.
+- The admin portal shows the same warning on the server card and in the Add / Edit form, and the password is never sent back to the browser.
+
+The session from `user.login` expires; the server re-authenticates automatically when Zabbix answers that it has. Use a dedicated Zabbix user with only the permissions the tools need, and `read_only = true` unless writes are genuinely required.
+
+**Keeping the password out of the config file:** `username` and `password` support `${ENV_VAR}` expansion. Under Docker, put the variable in `.env` (the compose file injects it via `env_file`):
+
+```bash
+# .env
+ZABBIX_OLD_PASSWORD=your-password-here
+```
+
+The `zabbix-utils` library this server uses refuses Zabbix below 6.0 by default; the version check is relaxed **only** for entries marked `legacy_auth`, never for token authentication.
 
 #### MCP Authentication (optional)
 
@@ -296,7 +332,7 @@ api_token = "staging-token"
 read_only = false
 ```
 
-The first server (`production`) is used as the default. To target a specific instance, just mention it naturally in your prompt:
+The first server (`production`) is used as the default. One exception: when the MCP token making the call is restricted to exactly one server (`allowed_servers = ["staging"]`), that server is the default for the call - so per-user tokens, each pointing at its own `[zabbix.<user>]` entry, work without the user having to name their server every time. To target a specific instance, just mention it naturally in your prompt:
 
 #### Prompt examples
 
@@ -735,9 +771,67 @@ items = json.loads(result)
 
 #### Tasks API for long-running tools
 
-When fronted by Cloudflare or a reverse proxy with a typical 30 s read timeout, synchronous PDF generation on bigger host groups can fail mid-flight. The `report_generate` tool advertises `execution.taskSupport: "optional"` (per MCP 2025-11-25 spec), so MCP clients can opt into asynchronous execution: instead of holding a single long HTTP request, the client receives a task id, polls until the task completes, then pulls the final payload.
+When fronted by Cloudflare or a reverse proxy with a typical 30 s read timeout, synchronous PDF generation on bigger host groups can fail mid-flight. The `report_generate` tool advertises `execution.taskSupport: "optional"`, so MCP clients can opt into asynchronous execution: instead of holding a single long HTTP request, the client receives a task id, polls until the task completes, then pulls the final payload.
+
+Since v1.34 this runs on the official `io.modelcontextprotocol/tasks` extension (MCP 2026-07-28), advertised under `capabilities.extensions`: a `tools/call` carrying `task: {...}` returns immediately with the task handle in the result `_meta`, the client polls `tasks/get` and fetches the payload from `tasks/result`. `tasks/cancel` stops work in flight. The store keeps its guard rails - default TTL 1 h, 24 h ceiling, capped live tasks with a retryable error.
 
 Other tools stay synchronous (under 5 s typically) - the polling overhead is not worth it.
+
+#### Report delivery: keeping the PDF out of the context window
+
+Even with tasks, the finished PDF still has to travel back through the MCP channel and into the model's context. For a big host group that is wasteful at best and fatal at worst.
+
+**The default answer is a resource link.** The tool hands back a pointer plus a one-line summary; the client fetches the bytes over `resources/read` only if the user actually wants the document, so the PDF never enters the conversation:
+
+```jsonc
+{ "report_type": "availability", "hostgroupid": "42", "as_link": true }
+// -> text summary + resource_link zabbix://reports/<id> (application/pdf, 37 kB)
+```
+
+This also kicks in **automatically** when the inline payload would exceed `[server].response_max_chars` - those calls used to fail outright, so a link is strictly better. Links expire after an hour by default; the lifetime and how many reports are held at once are set in **Settings -> Report Delivery** (`[reporting].link_ttl` / `link_max_reports`).
+
+**A `zabbix://` link can only be opened by an MCP client**, so the person reading the chat cannot click it. When the server runs over HTTP the same report is therefore also published at an ordinary URL the AI can simply hand over:
+
+```jsonc
+{
+  "report_uri":    "zabbix://reports/d121662ba49d4685a6200b8a4d1cbe65",
+  "download_url":  "https://mcp.example.com/reports/d121662ba49d4685a6200b8a4d1cbe65.pdf"
+}
+```
+
+The 122-bit random report id (uuid4) **is** the credential (a capability URL): unguessable, valid for one report, and dead the moment the link expires. The route needs no bearer token on purpose - the point is that a human can open it in a browser - and it answers with `Content-Disposition: attachment`, `Cache-Control: no-store, private` and `Referrer-Policy: no-referrer`. Set `[reporting].download_urls = false` to keep the MCP link only.
+
+> **Behind a reverse proxy: forward `/reports/` as well.** The download route is served by the MCP backend, so a proxy that forwards a *list* of paths (`/mcp`, `/token`, `/authorize`, ...) rather than a catch-all `/` will answer 404 for a link that otherwise looks perfectly correct. Add it next to the others:
+>
+> ```apache
+> ProxyPass        /reports/ http://127.0.0.1:8080/reports/
+> ProxyPassReverse /reports/ http://127.0.0.1:8080/reports/
+> ```
+>
+> **Set `[server].public_url`** - without it there is usually no download link at all. The URL is only built from an address somebody vouched for: `public_url`, or `X-Forwarded-Host` + `X-Forwarded-Proto` from a peer listed in `[server].trusted_proxies`. Nothing is inferred from the local bind or a bare `Host`: behind a proxy both are `127.0.0.1`, and a remote user handed that would be pointed at their own machine.
+
+When no such address exists - **stdio has no HTTP listener at all**, and an unproxied server without `public_url` has nothing to vouch for it - the response carries a `download_url_unavailable` line naming what to configure instead of a link that would not resolve. The `zabbix://` resource link keeps working either way.
+
+Two more channels exist for cases where the file should leave the conversation entirely - they answer with a receipt instead of the document:
+
+```jsonc
+// writes /var/lib/zabbix-mcp/reports/zabbix-availability-42-20260807-101500.pdf
+{ "report_type": "availability", "hostgroupid": "42", "save_to_file": true }
+
+// mails it as an attachment (a fallback for "send it to a person, not a chat")
+{ "report_type": "availability", "hostgroupid": "42", "email_to": "ops@example.com" }
+```
+
+Both are **off until the operator turns them on**, and the AI client never picks the destination:
+
+Configured in the admin portal under **Settings -> Report Delivery** (or in `config.example.toml`):
+
+| | Config | Fence |
+|---|---|---|
+| `save_to_file` | `[reporting].output_dir` | Filename is generated server-side; the resolved path must stay inside the configured directory |
+| `email_to` | `[reporting.email]` | Every recipient must match `allowed_recipients` (exact address or a `*@domain` glob); 25 MB attachment ceiling |
+
+Asking for a channel the operator has not configured returns a plain explanation of what is missing, not a stack trace. See `config.example.toml` for the full block.
 
 ```python
 # Async PDF generation via Tasks API. Requires a client that advertises
@@ -851,10 +945,15 @@ The `report_generate` tool produces professional PDF reports from Zabbix data. R
 PDF generation requires two extra Python packages. The installer pulls them in automatically when the optional `[reporting]` extra is selected; for manual installs:
 
 ```bash
-pip install zabbix-mcp-server[reporting]
-# or
+# zabbix-mcp-server is not published on PyPI - install from a checkout
+pip install "/path/to/zabbix-mcp-server[reporting]"
+# or add the extras to an existing install
 pip install weasyprint jinja2
 ```
+
+weasyprint also needs system libraries (Pango, GDK-PixBuf). If the Python
+package is present but those libraries are not, the server logs a warning and
+starts with reporting disabled.
 
 **Branding** is configured in `config.toml`:
 
@@ -965,8 +1064,10 @@ All available options with detailed descriptions are in [`config.example.toml`](
 <tr><td><code>allowed_import_dirs</code></td><td>Directories for <code>source_file</code> imports (default: disabled)</td></tr>
 <tr><td><code>compact_output</code></td><td>Return only key fields from get methods (default: <code>true</code>); set to <code>false</code> to always return all fields</td></tr>
 <tr><td><code>response_max_chars</code></td><td>Maximum characters per tool response before truncation (default: <code>50000</code>, min: <code>5000</code>). Increase for template export workflows: <code>200000</code> for medium templates, <code>500000</code> for large built-in templates. See <a href="#token-budget">Token Budget</a></td></tr>
-<tr><td rowspan="5"><code>[zabbix.&lt;name&gt;]</code></td><td><code>url</code></td><td>Zabbix frontend URL (must start with <code>http://</code> or <code>https://</code>)</td></tr>
-<tr><td><code>api_token</code></td><td>API token (supports <code>${ENV_VAR}</code>)</td></tr>
+<tr><td rowspan="7"><code>[zabbix.&lt;name&gt;]</code></td><td><code>url</code></td><td>Zabbix frontend URL (must start with <code>http://</code> or <code>https://</code>)</td></tr>
+<tr><td><code>api_token</code></td><td>API token (supports <code>${ENV_VAR}</code>) — required, except on an entry with <code>legacy_auth = true</code></td></tr>
+<tr><td><code>legacy_auth</code></td><td>Explicit switch for password login on <strong>Zabbix 5.0 / 5.2 only</strong> (no API tokens there). Refused against Zabbix 5.4+, refused together with <code>api_token</code>. Unsupported upstream release and a security risk - see <a href="#legacy-auth-zabbix-50-and-52-only">Legacy auth</a>. Default <code>false</code></td></tr>
+<tr><td><code>username</code> / <code>password</code></td><td>Zabbix login credentials, only honoured when <code>legacy_auth = true</code> (supports <code>${ENV_VAR}</code>)</td></tr>
 <tr><td><code>read_only</code></td><td>Block write operations (default: <code>true</code>)</td></tr>
 <tr><td><code>verify_ssl</code></td><td>Verify TLS certificates (default: <code>true</code>)</td></tr>
 <tr><td><code>skip_version_check</code></td><td>Skip zabbix-utils version compatibility check (default: <code>false</code>)</td></tr>
@@ -983,7 +1084,7 @@ All available options with detailed descriptions are in [`config.example.toml`](
 
 ## OAuth 2.1 Authorization Server
 
-Since v1.28 the server ships an embedded OAuth 2.1 authorization server. Clients that auto-discover authentication (ChatGPT custom apps, Claude Desktop remote, MCP Inspector, any [MCP 2025-11-25](https://modelcontextprotocol.io/specification) client) can sign in against your Zabbix MCP deployment **without an external IdP, without a hardcoded bearer, and without operators learning OAuth library internals**.
+Since v1.28 the server ships an embedded OAuth 2.1 authorization server. Clients that auto-discover authentication (ChatGPT custom apps, Claude Desktop remote, MCP Inspector, any [MCP 2025-11-25 or 2026-07-28](https://modelcontextprotocol.io/specification) client) can sign in against your Zabbix MCP deployment **without an external IdP, without a hardcoded bearer, and without operators learning OAuth library internals**.
 
 ```toml
 [server]
@@ -998,7 +1099,7 @@ What you get:
 - **Discovery** - RFC 8414 `/.well-known/oauth-authorization-server`, RFC 9728 `/.well-known/oauth-protected-resource`, `WWW-Authenticate: Bearer ... resource_metadata="..."` on 401.
 - **Dynamic client registration** - RFC 7591 `/register`. ChatGPT's "Advanced OAuth settings" auto-detects everything from the discovery documents.
 - **Authorization code + PKCE S256**, refresh-token rotation, RFC 7009 revocation, RFC 8707 audience binding.
-- **Two-step consent screen** (v1.29) - operator credentials check, then per-scope checkbox grant. Wildcard `*` and concrete groups are mutually exclusive. Role caps the grant: `admin` may grant any scope, `operator` is limited to `monitoring / data_collection / alerts / extensions`, `viewer` to `monitoring / extensions`.
+- **Two-step consent screen** (v1.29) - operator credentials check, then per-scope checkbox grant. Wildcard `*` and concrete groups are mutually exclusive. Role caps the grant: `admin` may grant any scope, `operator` is limited to `monitoring / data_collection / alerts / extensions`, `viewer` to `monitoring / extensions`, and a viewer's token is read-only at the server (v1.37.3).
 - **Refresh-token reuse detection** (RFC 6819 §5.2.2.3) - replaying an already-rotated refresh token revokes the entire token family and writes an audit row.
 - **Per-client IP allowlist + TTL override** in `[oauth_clients.<id>]`, editable from the OAuth Clients page in the admin portal.
 - **Login uses the existing admin-portal users** ([admin.users.*], scrypt-hashed) - operators do not maintain a second identity store. Login + consent UI mirrors the admin portal theme.
@@ -1139,10 +1240,27 @@ The installer automatically detects the best available Python (>=3.10). If none 
 <tr><td>8.0</td><td>Experimental</td><td>Works with <code>skip_version_check = true</code> — core API methods tested, some 8.0-specific methods may not be covered yet</td></tr>
 <tr><td>7.0 LTS, 7.2, 7.4</td><td>Fully supported</td><td>All API methods match this version — complete feature coverage</td></tr>
 <tr><td>6.0 LTS, 6.2, 6.4</td><td>Supported</td><td>Core methods work, some newer API methods (e.g. proxy groups, MFA) may return errors</td></tr>
-<tr><td>5.0 LTS, 5.2, 5.4</td><td>Basic support</td><td>Core monitoring and data collection work, newer features unavailable</td></tr>
+<tr><td>5.4</td><td>Basic, untested</td><td>Has API tokens, so the normal configuration applies. Core monitoring and data collection should work; not in our test matrix</td></tr>
+<tr><td>5.0 LTS, 5.2</td><td>Legacy, best effort</td><td><strong>Out of upstream support, no API tokens.</strong> Reachable only through <code>legacy_auth = true</code> with a username and password - a security risk by design, see <a href="#legacy-auth-zabbix-50-and-52-only">Legacy auth</a>. Not in our test matrix; verified by a community contributor on 5.0.47</td></tr>
 </table>
 
 The server uses the standard Zabbix JSON-RPC API. Methods not available in your Zabbix version will return an error from the Zabbix server — the MCP server itself does not enforce version checks.
+
+## MCP Protocol Compatibility
+
+The server answers **every supported protocol revision from one endpoint** - no separate URL, no per-client configuration. A client negotiates the revision it knows; the server adapts.
+
+<table>
+<tr><th width="220">Protocol revision</th><th width="120">Status</th><th>Notes</th></tr>
+<tr><td>2026-07-28</td><td>Supported (v1.34+)</td><td>Stateless: no <code>initialize</code> handshake, no <code>Mcp-Session-Id</code>. Each request carries its version, client info and capabilities in <code>_meta</code>. Adds <code>server/discover</code>, cacheable list results, and the <code>io.modelcontextprotocol/tasks</code> extension.</td></tr>
+<tr><td>2025-11-25</td><td>Fully supported</td><td>What Claude Desktop, claude.ai connectors, ChatGPT custom apps and MCP Inspector speak today. Handshake + session transport, unchanged.</td></tr>
+<tr><td>2025-06-18, 2025-03-26, 2024-11-05</td><td>Supported</td><td>Older revisions still negotiate; a request without a version header is treated as 2025-03-26 per spec.</td></tr>
+</table>
+
+Two operator-visible knobs come with the 2026-07-28 revision:
+
+- **`[server].tools_list_cache_ttl`** (seconds, default 300) - the `ttlMs` freshness hint on `tools/list`. The catalog only changes on restart, so letting clients cache it saves re-sending the whole schema set every session. `cacheScope` is always `private` because the catalog is filtered per token.
+- **`Mcp-Method` / `Mcp-Name` request headers** - the revision requires them on Streamable HTTP POSTs, which means an L7 firewall or reverse proxy can allow or deny individual MCP methods and tool names **without parsing the JSON-RPC body**. Useful when policy says "this network segment may call read tools only".
 
 ## Development
 

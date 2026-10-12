@@ -33,9 +33,9 @@ from pathlib import Path
 from typing import Annotated, Any, Optional
 
 from pydantic import Field
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
-from mcp.server.fastmcp.utilities import func_metadata as _fm_module
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.utilities import func_metadata as _fm_module
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
@@ -45,6 +45,7 @@ from mcp.types import (
     Icon,
     ListToolsRequest,
     ListToolsResult,
+    ResourceLink,
     ServerResult,
     TextContent,
     ToolAnnotations,
@@ -656,17 +657,37 @@ def _resolve_source_file(
             "are permitted."
         )
 
-    # Open with O_NOFOLLOW to reject symlinks atomically (no TOCTOU race)
+    # Open with O_NOFOLLOW so a symlink swapped in as the FINAL path
+    # component after the containment check above is refused. That is
+    # what O_NOFOLLOW covers - a directory symlink introduced higher up
+    # the already-resolved path would still be followed by the kernel,
+    # so the check-to-open window is narrowed, not closed. The fstat
+    # below then insists on a regular file: a directory, FIFO or device
+    # under an allowed dir passes containment but must never be read.
+    # O_NONBLOCK makes the open of a writer-less FIFO return at once
+    # instead of parking this thread until a writer shows up; it is a
+    # no-op for a regular file.
+    import errno
     import os
+    import stat
     try:
-        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError:
+        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise ValueError(
+                "source_file must not be a symbolic link (security restriction)."
+            ) from None
         raise ValueError(
-            "source_file must not be a symbolic link (security restriction)."
-        )
+            f"source_file could not be opened: {exc.strerror or exc.__class__.__name__}."
+        ) from None
     try:
-        content = os.fdopen(fd, "r", encoding="utf-8").read()
-    except Exception:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(
+                "source_file must be a regular file (security restriction)."
+            )
+        with os.fdopen(fd, "r", encoding="utf-8") as fh:
+            content = fh.read()
+    except ValueError:
         os.close(fd)
         raise
     result = {**params, "source": content}
@@ -1115,30 +1136,172 @@ def _ensure_write_tools_set() -> None:
         _WRITE_TOOLS = _build_write_tools_set()
 
 
-def _patch_fastmcp_convert_result_for_tasks() -> None:
-    """Make FastMCP's result converter propagate ``CreateTaskResult``.
+_HOST_RE = re.compile(r"^[A-Za-z0-9.\-]+(:\d{1,5})?$|^\[[0-9A-Fa-f:.]+\](:\d{1,5})?$")
 
-    The 1.26 ``FuncMetadata.convert_result`` only special-cases
-    ``CallToolResult``; anything else (including the new
-    ``CreateTaskResult`` from Tasks API) gets shoved through
-    ``_convert_to_content`` and ends up as a stringified text block.
-    The low-level ``Server.call_tool`` decorator already understands
-    ``CreateTaskResult`` and passes it straight through (see
-    ``mcp/server/lowlevel/server.py`` around the ``isinstance(results,
-    CreateTaskResult)`` branch), so we only need to convince FastMCP
-    to leave it alone. Idempotent - safe to call multiple times.
+
+def _forwarded_base_from_headers(headers: dict[bytes, bytes]) -> str | None:
+    """Public scheme + authority as declared by a trusted reverse proxy.
+
+    Only ``X-Forwarded-Host`` / ``-Proto`` are read, and the caller must
+    already have established that the peer is a configured trusted proxy.
+    The bare ``Host`` header is deliberately NOT used: the MCP SDK pins
+    the accepted Host to loopback whenever no explicit host allowlist is
+    configured, so "the address the caller dialled" is ``127.0.0.1:8080``
+    in exactly the proxied deployment where a link matters - which is how
+    a remote user ends up with a link to their own machine.
+
+    The *last* element of a forwarded chain is taken, not the first: a
+    proxy that appends leaves the client's own value in front, so the
+    nearest hop is the one this server can vouch for. (This is the
+    opposite of ``X-Forwarded-For``, where the first entry is the
+    original client and is what an IP allowlist wants.)
     """
-    if getattr(_fm_module.FuncMetadata.convert_result, "_zmcp_patched", False):
-        return
-    _orig_convert = _fm_module.FuncMetadata.convert_result
+    host = headers.get(b"x-forwarded-host", b"").decode("latin-1").split(",")[-1].strip()
+    if not host or not _HOST_RE.match(host):
+        # Not a bare authority - a header could otherwise smuggle a path,
+        # a query or a second origin into the link handed to the user.
+        return None
+    proto = headers.get(b"x-forwarded-proto", b"").decode("latin-1").split(",")[-1].strip()
+    if proto not in ("http", "https"):
+        return None
+    return f"{proto}://{host}"
 
-    def _convert_with_tasks(self, result):  # type: ignore[no-untyped-def]
-        if isinstance(result, CreateTaskResult):
-            return result
-        return _orig_convert(self, result)
 
-    _convert_with_tasks._zmcp_patched = True  # type: ignore[attr-defined]
-    _fm_module.FuncMetadata.convert_result = _convert_with_tasks
+def _make_request_context_middleware(inner_app, trusted_proxies: list[str]):
+    """ASGI middleware publishing per-request context to the tool handlers.
+
+    Sets two context variables consumed further down: the client IP (for
+    token IP allowlists) and, when a trusted proxy declared one, the
+    public base URL for report download links.
+
+    ``trusted_proxies`` entries are parsed as addresses or networks, so
+    ``10.0.0.0/24`` and any spelling of an IPv6 address match the peer.
+    String equality silently ignored both, which used to only weaken the
+    IP allowlist but now also decides whether a download link is correct.
+    Unparseable entries stay literal so nothing that worked before stops.
+    """
+    import ipaddress
+
+    from zabbix_mcp.token_store import (
+        current_client_ip as _cip_var,
+        current_request_base as _rb_var,
+        current_token_info as _cti_var,
+    )
+
+    nets = []
+    literals = set()
+    for entry in trusted_proxies:
+        try:
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            literals.add(entry)
+            logger.warning(
+                "trusted_proxies entry %r is not an IP address or network; it will "
+                "only match an exact string.", entry)
+
+    def _is_trusted(addr: str | None) -> bool:
+        if not addr:
+            return False
+        if addr in literals:
+            return True
+        try:
+            parsed = ipaddress.ip_address(addr)
+        except ValueError:
+            return False
+        return any(parsed in net for net in nets)
+
+    async def _middleware(scope, receive, send):
+        _cti_var.set(None)
+        peer = None
+        base = None
+        if scope["type"] in ("http", "websocket"):
+            client = scope.get("client")
+            raw_peer = client[0] if client else None
+            peer = raw_peer
+            headers = dict(scope.get("headers", []))
+            trusted = _is_trusted(raw_peer)
+            if trusted:
+                # The original client, for the token IP allowlist: the
+                # FIRST entry of the forwarded chain.
+                xff = headers.get(b"x-forwarded-for", b"").decode()
+                if xff:
+                    first = xff.split(",")[0].strip()
+                    if first:
+                        peer = first
+                if scope["type"] == "http":
+                    base = _forwarded_base_from_headers(headers)
+        _cip_var.set(peer)
+        _rb_var.set(base)
+        try:
+            await inner_app(scope, receive, send)
+        finally:
+            _cti_var.set(None)
+            _cip_var.set(None)
+            _rb_var.set(None)
+
+    return _middleware
+
+
+def _report_download_base(config, transport: str) -> tuple[str | None, str | None]:
+    """Base URL for report downloads, or (None, reason) when there is none.
+
+    A download URL that does not resolve is worse than no URL: the model
+    hands the user a dead link, and the report id in it - which is the
+    credential - goes to whatever answers at that address. So a URL is
+    only built from an address somebody explicitly vouched for:
+
+    * ``[server].public_url`` - the operator stating the public address.
+      The only correct answer when TLS terminates upstream, since the
+      local ``tls_cert_file`` says nothing about the scheme the client
+      speaks.
+    * ``X-Forwarded-Host`` / ``-Proto`` from a peer in
+      ``[server].trusted_proxies`` - the proxy stating it instead.
+
+    Nothing is inferred from the local bind or from a bare ``Host``
+    header; see :func:`_forwarded_base_from_headers` for why the latter
+    cannot be trusted here.
+    """
+    if transport not in ("http", "sse"):
+        return None, (
+            "No download URL: the server runs on stdio transport, so it has no HTTP "
+            "listener. The report_uri resource link still works."
+        )
+    public = (getattr(config.server, "public_url", "") or "").strip().rstrip("/")
+    if public:
+        return public, None
+    from zabbix_mcp.token_store import current_request_base
+    base = current_request_base.get()
+    if base:
+        return base.rstrip("/"), None
+    return None, (
+        "No download URL: set [server].public_url to the address clients reach this "
+        "server on (any scheme). Without it the server cannot know which address a "
+        "link should point at. The report_uri resource link still works."
+    )
+
+
+def _default_server_for_caller(client_manager) -> str | None:
+    """Which Zabbix server a tool call means when it does not say.
+
+    A token scoped to exactly one server can only ever reach that one,
+    so falling back to the *global* default (the first server in the
+    config) just produces a denial naming somebody else's server, for an
+    ordinary question. That is what made the per-user deployment of
+    #74 work only for whoever happened to be listed first.
+
+    Only an unambiguous scope is honoured: a wildcard, several servers,
+    or a name that is not configured all fall back to the global
+    default, and check_token_authorization still has the last word
+    after this - so a caller can only ever land on a server it would
+    have been allowed to name explicitly.
+    """
+    from zabbix_mcp.token_store import current_token_info
+    token = current_token_info.get()
+    if token is not None:
+        allowed = list(getattr(token, "allowed_servers", None) or [])
+        if len(allowed) == 1 and allowed[0] != "*" and allowed[0] in client_manager.server_names:
+            return allowed[0]
+    return client_manager.default_server
 
 
 def _load_server_icons() -> list[Icon] | None:
@@ -1165,21 +1328,21 @@ def _load_server_icons() -> list[Icon] | None:
 
 
 def _build_transport_security(config: AppConfig, host: str, port: int) -> TransportSecuritySettings | None:
-    """Compose ``TransportSecuritySettings`` for FastMCP from project config.
+    """Compose ``TransportSecuritySettings`` for MCPServer from project config.
 
     The MCP 2025-11-25 spec asks servers to validate the Origin header
-    against an allowlist (return HTTP 403 on mismatch). FastMCP can
+    against an allowlist (return HTTP 403 on mismatch). MCPServer can
     enforce this via ``TransportSecuritySettings`` but defaults to off
     for backwards compatibility when the bind host is not localhost.
 
-    We keep that BC in the no-config case (return None and let FastMCP
+    We keep that BC in the no-config case (return None and let MCPServer
     decide), but the moment the operator declares ``public_url`` or sets
     ``allowed_hosts`` / ``allowed_origins`` explicitly, we flip
     DNS-rebinding protection on. ``public_url`` alone is enough on its
     own - we derive ``host:port`` for Host and ``scheme://host[:port]``
     for Origin, which covers the typical reverse-proxy deployment.
 
-    Returns None when there is no config at all, in which case FastMCP
+    Returns None when there is no config at all, in which case MCPServer
     falls back to its localhost-only smart default when bound to
     127.0.0.1 / ::1 / localhost, or leaves protection off when bound to
     0.0.0.0. Callers should log a warning in the latter case.
@@ -1285,7 +1448,7 @@ def _raise_if_extension_error(result: str, *, raw_json: bool = False) -> str:
     as a small JSON object ``{"error": "..."}``. Pre-2025-11-25 that
     landed as a successful tool result whose body happened to contain
     error info; SEP-1303 asks for ``isError=true`` on the
-    ``CallToolResult`` instead. Re-raise as ``ToolError`` here, FastMCP
+    ``CallToolResult`` instead. Re-raise as ``ToolError`` here, MCPServer
     converts that into the right shape.
 
     Successful payloads echo Zabbix-controlled strings (host names, item
@@ -1300,7 +1463,7 @@ def _raise_if_extension_error(result: str, *, raw_json: bool = False) -> str:
     if isinstance(parsed, dict) and "error" in parsed and len(parsed) <= 2:
         msg = parsed["error"]
         # Error strings often quote Zabbix-supplied text (host name,
-        # item key, ...). FastMCP ships them verbatim to the LLM via
+        # item key, ...). MCPServer ships them verbatim to the LLM via
         # the SEP-1303 isError envelope. Prepend the same untrusted-
         # data marker so an attacker who controls a Zabbix description
         # cannot craft an error message that reads as instructions.
@@ -1399,7 +1562,7 @@ def _make_tool_handler(
     compact_output: bool = True,
     response_max_chars: int = _RESPONSE_MAX_CHARS,
 ):
-    """Create a tool handler with a proper typed signature for FastMCP schema generation."""
+    """Create a tool handler with a proper typed signature for MCPServer schema generation."""
 
     # Build the actual handler that does the work
     async def handler(**kwargs: Any) -> str:
@@ -1409,7 +1572,7 @@ def _make_tool_handler(
         _raw_err = _check_raw_json_allowed(raw_json)
         if _raw_err:
             # MCP 2025-11-25 (SEP-1303): tool-level errors surface as
-            # CallToolResult(isError=True), not JSON-RPC -32602. FastMCP
+            # CallToolResult(isError=True), not JSON-RPC -32602. MCPServer
             # converts any exception raised inside the handler into that
             # shape; ToolError signals tool-level (vs. system) error.
             raise ToolError(_raw_err)
@@ -1418,9 +1581,10 @@ def _make_tool_handler(
         # session (user.logout, user.checkAuthentication,
         # userdirectory.test) accept an ``auth_sessionid`` parameter
         # that the wrapper uses for the JSON-RPC ``auth`` field
-        # instead of the configured api_token. Lets the caller log in
-        # via user.login first, then exercise these tools without
-        # invalidating the long-lived MCP api_token.
+        # instead of the configured server credentials (api_token or
+        # username/password). Lets the caller log in via user.login
+        # first, then exercise these tools without invalidating the
+        # long-lived MCP server auth session.
         # Only the three session-scoped methods are allowed to consume
         # ``auth_sessionid``. Any other tool that receives the kwarg
         # gets it silently dropped so a caller cannot reroute (say)
@@ -1435,7 +1599,7 @@ def _make_tool_handler(
             kwargs.pop("auth_sessionid", None)
             auth_sessionid = None
 
-        server_name = kwargs.get("server") or client_manager.default_server
+        server_name = kwargs.get("server") or _default_server_for_caller(client_manager)
         if not server_name:
             raise ToolError("No Zabbix server configured.")
 
@@ -1488,7 +1652,7 @@ def _make_tool_handler(
             return _format_result(_truncate_result(result, max_chars=response_max_chars), raw_json)
 
         except ToolError:
-            # Already shaped for the LLM - let FastMCP mark isError=True.
+            # Already shaped for the LLM - let MCPServer mark isError=True.
             raise
         except (ReadOnlyError, RateLimitError, ValueError) as e:
             raise ToolError(str(e))
@@ -1498,7 +1662,7 @@ def _make_tool_handler(
                 f"API call failed for {method_def.api_method}. Check server logs for details."
             )
 
-    # Build a dynamic function signature so FastMCP generates proper JSON Schema
+    # Build a dynamic function signature so MCPServer generates proper JSON Schema
     sig_params: list[inspect.Parameter] = []
 
     # Server parameter
@@ -1549,7 +1713,7 @@ def _make_tool_handler(
 
 
 def _register_tools(
-    mcp: FastMCP,
+    mcp: MCPServer,
     client_manager: ClientManager,
     tools_filter: list[str] | None = None,
     disabled_tools: list[str] | None = None,
@@ -1558,6 +1722,7 @@ def _register_tools(
     compact_output: bool = True,
     response_max_chars: int = _RESPONSE_MAX_CHARS,
     config: AppConfig | None = None,
+    transport: str = "stdio",
 ) -> int:
     """Register Zabbix API methods as MCP tools. Returns tool count.
 
@@ -1625,13 +1790,14 @@ def _register_tools(
     # Build a set of known read-only API methods from tool definitions.
     _KNOWN_READ_ONLY = {m.api_method.lower() for m in ALL_METHODS if m.read_only}
 
-    # Fallback suffix whitelist for methods not in ALL_METHODS.
+    # Fallback suffix whitelist for methods not in ALL_METHODS. ".test" is
+    # not on it: mediatype.test sends a real message through the media
+    # type. userdirectory.test stays read-only through its MethodDef.
     _READ_ONLY_SUFFIXES = (
         ".get",
         ".getscriptsbyevents", ".getscriptsbyhosts",
         ".export", ".importcompare",
         ".checkauthentication",
-        ".test",
     )
 
     async def zabbix_raw_api_call(
@@ -1647,7 +1813,7 @@ def _register_tools(
         if _raw_err:
             raise ToolError(_raw_err)
 
-        server_name = server or client_manager.default_server
+        server_name = server or _default_server_for_caller(client_manager)
         if not server_name:
             raise ToolError("No Zabbix server configured.")
         try:
@@ -1740,7 +1906,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         _auth_err = check_token_authorization(srv, tool_prefix="graph")
         if _auth_err:
             raise ToolError(_auth_err)
@@ -1772,7 +1938,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         _auth_err = check_token_authorization(srv, tool_prefix="host")
         if _auth_err:
             raise ToolError(_auth_err)
@@ -1804,7 +1970,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         _auth_err = check_token_authorization(srv, tool_prefix="host")
         if _auth_err:
             raise ToolError(_auth_err)
@@ -1853,7 +2019,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         _auth_err = check_token_authorization(srv, tool_prefix="item")
         if _auth_err:
             raise ToolError(_auth_err)
@@ -1908,7 +2074,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         _auth_err = check_token_authorization(srv, tool_prefix="problem")
         if _auth_err:
             raise ToolError(_auth_err)
@@ -1941,7 +2107,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         # Composite read - require scope for every Zabbix endpoint we
         # internally call so a narrow-scoped token can't read problems
         # / items here that it could not pull via problem_get / item_get.
@@ -1974,7 +2140,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         # Composite read - covers hostgroup + member host + active problems.
         _auth_err = check_token_authorization(srv, tool_prefixes=[
             "hostgroup", "host", "problem", "trigger",
@@ -2003,7 +2169,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         # Composite read - aggregates host / item / trigger / template /
         # problem counts plus per-group breakdown. Requires scope for
         # every endpoint we sum over.
@@ -2037,7 +2203,7 @@ def _register_tools(
         _raw_err = _check_raw_json_allowed(bool(raw_json))
         if _raw_err:
             raise ToolError(_raw_err)
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
         # Composite read - item metadata + history + parent host name.
         _auth_err = check_token_authorization(srv, tool_prefixes=[
             "item", "history", "host",
@@ -2059,11 +2225,55 @@ def _register_tools(
     # ------------------------------------------------------------------
     try:
         from zabbix_mcp.reporting.engine import ReportEngine, REPORTING_AVAILABLE, _REPORT_TEMPLATES
-        if REPORTING_AVAILABLE:
+        # `config` is optional on this entry point (tests register the
+        # tool set without one). Everything below reads branding and
+        # delivery settings off it, so skip the whole block rather than
+        # dereferencing None - the report tool needs a config to be
+        # useful anyway.
+        if REPORTING_AVAILABLE and config is not None:
+            _server_cfg = config.server
             report_engine = ReportEngine(
-                logo_path=getattr(config.server, "report_logo", None),
-                company_name=getattr(config.server, "report_company", ""),
-                subtitle=getattr(config.server, "report_subtitle", "IT Monitoring Service"),
+                logo_path=getattr(_server_cfg, "report_logo", None),
+                company_name=getattr(_server_cfg, "report_company", ""),
+                subtitle=getattr(_server_cfg, "report_subtitle", "IT Monitoring Service"),
+            )
+
+            # Backs zabbix://reports/<id> links so a finished PDF can be
+            # handed to the client as a pointer instead of a base64 blob
+            # in the model's context (issue #68).
+            from zabbix_mcp.reporting.store import ReportStore
+            report_store = ReportStore(
+                ttl_s=config.reporting.link_ttl,
+                max_reports=config.reporting.link_max_reports,
+            )
+            # Reachable from the /reports/<id>.pdf HTTP route, which is
+            # registered later, when the ASGI app is built, and so cannot
+            # close over this scope. The store rides on the AppConfig
+            # rather than a module global because config is per-server:
+            # two servers in one process (tests) get two configs and
+            # therefore two stores. Registering two servers against ONE
+            # config would make the route serve the last one's store -
+            # not a shape run_server can produce (single call site), but
+            # the reason this is an attribute and not a global.
+            object.__setattr__(config, "_report_store", report_store)
+
+            # Serve the stored PDFs behind their links, registered in the
+            # scope that owns the store.
+            @mcp.resource("zabbix://reports/{report_id}", mime_type="application/pdf",
+                          name="Generated report",
+                          description="A PDF report produced by report_generate. Expires after the configured link lifetime.")
+            async def resource_report(report_id: str) -> bytes:
+                """Return the stored PDF for a zabbix://reports/<id> link."""
+                item = report_store.get(report_id)
+                if item is None:
+                    raise ValueError(
+                        f"Report {report_id} is unknown or has expired - generate it again."
+                    )
+                return item[0]
+
+            logger.info(
+                "Registered MCP resource template (zabbix://reports/{id}, ttl %ds, max %d)",
+                config.reporting.link_ttl, config.reporting.link_max_reports,
             )
 
             # Load custom templates from [report_templates.*] config sections
@@ -2083,10 +2293,12 @@ def _register_tools(
             async def _report_generate_work(
                 *, report_type: str, hostgroupid: str,
                 period: str | None, company: str | None, server: str | None,
-            ) -> str:
+                save_to_file: bool = False, email_to: list[str] | str | None = None,
+                as_link: bool = True,
+            ) -> str | CallToolResult:
                 """Synchronous PDF generation - shared between sync and task-augmented paths."""
                 from zabbix_mcp.reporting import data_fetcher
-                srv = client_manager.resolve_server(server or client_manager.default_server)
+                srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
                 _auth_err = check_token_authorization(srv, tool_prefix="host")
                 if _auth_err:
                     raise ToolError(_auth_err)
@@ -2113,13 +2325,135 @@ def _register_tools(
                     pdf_bytes = await asyncio.to_thread(
                         report_engine.generate_report, report_type, context,
                     )
-                    encoded = base64.b64encode(pdf_bytes).decode("ascii")
-                    return json.dumps({
-                        "report": f"data:application/pdf;base64,{encoded}",
+                    # Out-of-band delivery (issue #68): a full PDF inline
+                    # can exceed the client's context window or a proxy
+                    # timeout. When the caller asks for disk or email, hand
+                    # over the payload there and return a short receipt
+                    # instead of the base64 blob.
+                    from zabbix_mcp.reporting.delivery import (
+                        build_filename as _delivery_filename,
+                    )
+                    recipients = email_to
+                    if isinstance(recipients, str):
+                        recipients = [r.strip() for r in recipients.split(",") if r.strip()]
+                    recipients = list(recipients or [])
+
+                    summary: dict[str, Any] = {
                         "report_type": report_type,
                         "pages": len(pdf_bytes) // 3000 + 1,
                         "size_kb": round(len(pdf_bytes) / 1024, 1),
-                    })
+                    }
+
+                    if save_to_file or recipients:
+                        from zabbix_mcp.reporting import delivery as _delivery
+                        filename = _delivery.build_filename(report_type, hostgroupid)
+                        if save_to_file:
+                            try:
+                                summary["saved_to"] = await asyncio.to_thread(
+                                    _delivery.save_report,
+                                    pdf_bytes, config.reporting.output_dir, filename,
+                                )
+                            except _delivery.DeliveryError as exc:
+                                raise ToolError(str(exc))
+                        if recipients:
+                            _period_label = period or "30d"
+                            try:
+                                summary["emailed_to"] = await asyncio.to_thread(
+                                    _delivery.send_report_email,
+                                    pdf_bytes, filename, recipients,
+                                    email_config=config.reporting.email,
+                                    subject=(
+                                        f"Zabbix {report_type} report ({_period_label})"
+                                        # Only append the company when there is one -
+                                        # otherwise the subject ends in a dangling dash.
+                                        + (f" - {_company}"
+                                           if (_company := (company or report_engine.company_name or "").strip())
+                                           else "")
+                                    ),
+                                    body=(
+                                        f"Attached: {report_type} report for host group "
+                                        f"{hostgroupid}, period {_period_label}.\n\n"
+                                        f"Generated by Zabbix MCP Server."
+                                    ),
+                                )
+                            except _delivery.DeliveryError as exc:
+                                raise ToolError(str(exc))
+                        summary["note"] = (
+                            "Delivered out of band - the PDF payload is intentionally "
+                            "omitted from this response to keep it small."
+                        )
+                        return json.dumps(summary)
+
+                    # A base64 PDF is ~1.37x the file size and lands
+                    # verbatim in the model's context. Past the response
+                    # ceiling the call would be truncated or blow the
+                    # window - those calls fail today (#68), so answering
+                    # with a resource link instead can only be an
+                    # improvement. `as_link` asks for it explicitly.
+                    #
+                    # The encoded length is computed, not measured: links
+                    # are now the default, and actually encoding a report
+                    # only to discard the string would allocate ~1.37x the
+                    # PDF and block the event loop on every single call.
+                    _encoded_len = -(-len(pdf_bytes) // 3) * 4
+                    _limit = getattr(config.server, "response_max_chars", 50000) if config else 50000
+                    if as_link or _encoded_len > _limit:
+                        filename = _delivery_filename(report_type, hostgroupid)
+                        rid = report_store.put(pdf_bytes, filename)
+                        uri = report_store.uri(rid)
+                        summary["report_uri"] = uri
+
+                        # A zabbix:// URI is only meaningful to an MCP
+                        # client. Hand out an https URL too so the person
+                        # reading the conversation can just click it.
+                        download_url = None
+                        _no_url_reason = None
+                        if config is not None and config.reporting.download_urls:
+                            base, _no_url_reason = _report_download_base(config, transport)
+                            if base:
+                                download_url = f"{base}/reports/{rid}.pdf"
+                                summary["download_url"] = download_url
+
+                        _mins = report_store._ttl_s // 60
+                        summary["note"] = (
+                            "Delivered as a link so the PDF stays out of the conversation "
+                            f"context. Expires in {_mins} minutes. "
+                            + ("Give the user the download_url - it opens in a browser. "
+                               if download_url else "")
+                            + "MCP clients can also read the report_uri resource directly."
+                        )
+                        if _no_url_reason:
+                            summary["download_url_unavailable"] = _no_url_reason
+                        if not as_link:
+                            summary["note"] += (
+                                f" (Inline delivery was skipped automatically: the encoded "
+                                f"report is {_encoded_len} chars, above the "
+                                f"{_limit}-char response limit.)"
+                            )
+                        _desc = (
+                            f"{report_type} report for host group {hostgroupid}, "
+                            f"period {period or '30d'} ({summary['size_kb']} kB PDF)"
+                        )
+                        if download_url:
+                            _desc += f". Download: {download_url}"
+                        return CallToolResult(content=[
+                            TextContent(type="text", text=json.dumps(summary)),
+                            ResourceLink(
+                                type="resource_link",
+                                uri=uri,
+                                name=filename,
+                                title=f"Zabbix {report_type} report",
+                                description=_desc,
+                                mimeType="application/pdf",
+                                size=len(pdf_bytes),
+                            ),
+                        ])
+
+                    summary["report"] = (
+                        f"data:application/pdf;base64,"
+                        f"{base64.b64encode(pdf_bytes).decode('ascii')}"
+                    )
+                    return json.dumps(summary)
                 except ToolError:
                     raise
                 except Exception as exc:
@@ -2138,37 +2472,39 @@ def _register_tools(
                 period: Annotated[Optional[str], Field(description="Report period: '7d', '30d', '90d' (default: '30d')")] = "30d",
                 company: Annotated[Optional[str], Field(description="Company name for report header (overrides config)")] = None,
                 server: Annotated[Optional[str], Field(description=server_desc)] = None,
+                save_to_file: Annotated[bool, Field(description="Write the PDF to the server's configured report directory instead of returning it inline. Requires [reporting].output_dir. Returns the path.")] = False,
+                email_to: Annotated[Optional[str], Field(description="Comma-separated recipients to email the PDF to as an attachment instead of returning it inline. Requires [reporting.email] and each address must match the operator's allowed_recipients.")] = None,
+                as_link: Annotated[bool, Field(description="Default true: return a link (an https download_url the user can click, plus the zabbix://reports/<id> MCP resource) instead of the PDF itself, so the document stays out of the conversation context. Set false to force the inline base64 data URI, which is only practical for small reports.")] = True,
             ):
-                """Generate a PDF report from Zabbix monitoring data. Returns the report
-                as a base64-encoded PDF data URI. Supported report types: availability
-                (SLA/uptime), capacity_host (CPU/memory/disk), capacity_network
-                (bandwidth/traffic), backup (daily success/fail matrix).
+                """Generate a PDF report from Zabbix monitoring data. Supported report
+                types: availability (SLA/uptime), capacity_host (CPU/memory/disk),
+                capacity_network (bandwidth/traffic), backup (daily success/fail matrix).
 
-                Long-running (5-30 s typically). Clients that support MCP 2025-11-25
-                Tasks API may invoke this with `task: {ttl: 60000}` to receive a
-                CreateTaskResult and poll `tasks/get` instead of holding a single
-                long HTTP request - useful when fronted by a proxy with short timeouts."""
-                # Detect task-augmented invocation. ctx.experimental.is_task is True
-                # when the client included `task: {...}` in the request params.
-                try:
-                    ctx = mcp._mcp_server.request_context  # type: ignore[attr-defined]
-                    exp = getattr(ctx, "experimental", None)
-                except LookupError:
-                    exp = None
+                Returns a link, not the document, so a multi-megabyte PDF never enters
+                the conversation: always a `zabbix://reports/<id>` MCP resource, and -
+                when the operator configured a public address for this server - a
+                `download_url` any browser can open. Give the user the download_url
+                when it is there; when it is not, the response says why in
+                `download_url_unavailable` and the resource link still holds the file.
+                Links expire (an hour by default). Pass `as_link: false` for the old
+                inline base64 data URI - only practical for small reports.
 
-                if exp is not None and exp.is_task:
-                    async def _work(task_ctx) -> CallToolResult:
-                        text = await _report_generate_work(
-                            report_type=report_type, hostgroupid=hostgroupid,
-                            period=period, company=company, server=server,
-                        )
-                        return CallToolResult(
-                            content=[TextContent(type="text", text=text)],
-                            isError=False,
-                        )
-                    return await exp.run_task(_work)
+                Two further deliveries exist when the operator enabled them:
+                `save_to_file: true` writes the PDF into the server's configured report
+                directory, and `email_to: "ops@example.com"` mails it as an attachment.
+                Both answer with a short receipt (path / recipients / size) and are
+                refused with a clear message when not configured.
+
+                Long-running (5-30 s typically). Clients that support the MCP tasks
+                extension may invoke this with `task: {ttl: 60000}` to get a task
+                handle and poll `tasks/get` instead of holding a single long HTTP
+                request - useful when fronted by a proxy with short timeouts."""
+                # Task-mode invocations are handled by the tasks extension
+                # interceptor before this handler runs - by the time we get
+                # here the call is always synchronous.
 
                 return await _report_generate_work(
+                    save_to_file=save_to_file, email_to=email_to, as_link=as_link,
                     report_type=report_type, hostgroupid=hostgroupid,
                     period=period, company=company, server=server,
                 )
@@ -2182,8 +2518,8 @@ def _register_tools(
                 logger.info("PDF reporting enabled (report_generate tool registered)")
         else:
             logger.info("PDF reporting disabled (install 'weasyprint' and 'jinja2' to enable)")
-    except ImportError:
-        logger.info("PDF reporting disabled (reporting module not found)")
+    except (ImportError, OSError) as exc:
+        logger.info("PDF reporting disabled (reporting module could not be loaded: %s)", exc)
 
     # ------------------------------------------------------------------
     # Action approval flow (two-step prepare + confirm)
@@ -2206,7 +2542,7 @@ def _register_tools(
         """Prepare a write action for review before execution. Returns a preview
         of what will happen and a confirmation token. Use action_confirm with the
         token to actually execute it. Tokens expire after 5 minutes."""
-        srv = client_manager.resolve_server(server or client_manager.default_server)
+        srv = client_manager.resolve_server(server or _default_server_for_caller(client_manager))
 
         # Token authorization: server + write permission
         _prefix = action.split(".")[0].lower() if "." in action else ""
@@ -2301,6 +2637,19 @@ def _register_tools(
         if action_data["expires"] < time.time():
             raise ToolError("Confirmation token has expired. Prepare the action again.")
 
+        # Check authorization again here, not only in action_prepare: the
+        # token's read_only flag or the server's may have changed in the
+        # five minutes between the two calls, and this is the call that
+        # writes.
+        _prefix = action_data["action"].split(".")[0].lower() if "." in action_data["action"] else ""
+        _auth_err = check_token_authorization(action_data["server"], tool_prefix=_prefix, is_write=True)
+        if _auth_err:
+            raise ToolError(_auth_err)
+        try:
+            client_manager.check_write(action_data["server"])
+        except ReadOnlyError as e:
+            raise ToolError(str(e))
+
         try:
             result = await asyncio.to_thread(
                 client_manager.call, action_data["server"],
@@ -2385,6 +2734,73 @@ class _IPAllowlistMiddleware:
                     await send({"type": "websocket.close", "code": 1008})
                     return
         await self._app(scope, receive, send)
+
+
+def _register_resources(mcp: MCPServer, client_manager: ClientManager) -> None:
+    """Expose the default server's hosts / problems / host groups /
+    templates as browsable MCP resources.
+
+    Lived inline in run_server until v1.37.3; pulled out so the
+    authorization guard on each resource can be tested without
+    starting a transport.
+    """
+    from mcp.server.mcpserver.exceptions import ResourceError
+    from zabbix_mcp.token_store import check_token_authorization
+
+    default_srv = client_manager.default_server
+
+    def _resource_guard(prefix: str) -> None:
+        # Resources went straight to the Zabbix API; a token scoped to
+        # another server, or without the scope that covers the data,
+        # could still read it here. Same check the tools run.
+        err = check_token_authorization(default_srv, tool_prefix=prefix)
+        if err:
+            # ResourceError reaches the client with its message; any
+            # other exception is masked as "Error reading resource".
+            raise ResourceError(err)
+
+    if default_srv:
+        @mcp.resource(f"zabbix://{default_srv}/hosts")
+        async def resource_hosts() -> str:
+            """List of all monitored hosts."""
+            _resource_guard("host")
+            result = await asyncio.to_thread(
+                client_manager.call, default_srv, "host.get",
+                {"output": ["hostid", "host", "name", "status"], "sortfield": "name"},
+            )
+            return json.dumps(result, indent=2)
+
+        @mcp.resource(f"zabbix://{default_srv}/problems")
+        async def resource_problems() -> str:
+            """Currently active problems."""
+            _resource_guard("problem")
+            result = await asyncio.to_thread(
+                client_manager.call, default_srv, "problem.get",
+                {"output": "extend", "recent": True, "sortfield": ["eventid"], "sortorder": "DESC", "limit": 100},
+            )
+            return json.dumps(result, indent=2)
+
+        @mcp.resource(f"zabbix://{default_srv}/hostgroups")
+        async def resource_hostgroups() -> str:
+            """All host groups."""
+            _resource_guard("hostgroup")
+            result = await asyncio.to_thread(
+                client_manager.call, default_srv, "hostgroup.get",
+                {"output": ["groupid", "name"], "sortfield": "name"},
+            )
+            return json.dumps(result, indent=2)
+
+        @mcp.resource(f"zabbix://{default_srv}/templates")
+        async def resource_templates() -> str:
+            """All templates."""
+            _resource_guard("template")
+            result = await asyncio.to_thread(
+                client_manager.call, default_srv, "template.get",
+                {"output": ["templateid", "host", "name"], "sortfield": "name"},
+            )
+            return json.dumps(result, indent=2)
+
+        logger.info("Registered MCP resources (zabbix://%s/...)", default_srv)
 
 
 def run_server(
@@ -2545,6 +2961,15 @@ def run_server(
                         sub.add(k, v)
                     doc["oauth_clients"][str(client_info.client_id)] = sub
                     save_config_document(cfg_path_for_oauth, doc)
+                # The running provider already holds this client, so the
+                # write is persistence for the NEXT boot only - re-baseline
+                # the admin portal's drift detector instead of leaving it
+                # to raise a false "restart needed" banner (issue #69).
+                try:
+                    from zabbix_mcp.admin.app import refresh_config_baseline
+                    refresh_config_baseline()
+                except Exception:
+                    logger.debug("Could not refresh admin restart baseline", exc_info=True)
 
             oauth_provider = ZmcpOAuthProvider(
                 public_url=server_url,
@@ -2743,15 +3168,23 @@ def run_server(
             host,
         )
 
-    # Allow CreateTaskResult to escape FastMCP's result converter unchanged
+    # Allow CreateTaskResult to escape MCPServer's result converter unchanged
     # so the task-augmented path on report_generate actually reaches the
     # low-level Server which knows how to ship it to the client. Idempotent.
-    _patch_fastmcp_convert_result_for_tasks()
+    # Official tasks extension (io.modelcontextprotocol/tasks) replaces the
+    # experimental 2025-11-25 Tasks API. The interceptor turns a tools/call
+    # carrying `task: {...}` on an advertised tool into an immediate
+    # CreateTaskResult with background execution; tasks/get / tasks/result /
+    # tasks/cancel are served as extension methods (tasks/list is gone per
+    # the 2026-07-28 redesign).
+    from zabbix_mcp.task_store import BoundedInMemoryTaskStore, build_tasks_extension
+    _task_store = BoundedInMemoryTaskStore()
+    _tasks_extension = build_tasks_extension(_task_store, set(_TASK_AUGMENTED_TOOLS))
 
-    mcp = FastMCP(
+    # SDK 2.0: host/port/transport_security moved out of the constructor -
+    # HTTP binding goes to uvicorn, transport_security to streamable_http_app().
+    mcp = MCPServer(
         name="zabbix-mcp-server",
-        host=host,
-        port=port,
         instructions=(
             "Zabbix MCP Server provides full access to the Zabbix monitoring API. "
             "Use the tools to query hosts, problems, triggers, items, and all other "
@@ -2761,7 +3194,7 @@ def run_server(
         ),
         website_url="https://github.com/initMAX/zabbix-mcp-server",
         icons=_load_server_icons(),
-        transport_security=transport_security,
+        extensions=[_tasks_extension],
         **auth_kwargs,
     )
 
@@ -2770,19 +3203,16 @@ def run_server(
     # tasks/list, tasks/cancel handlers on the low-level server. The
     # store ceiling protects against a misbehaved client filling RAM
     # with stale PDF payloads; the periodic sweeper is started below.
-    from zabbix_mcp.task_store import BoundedInMemoryTaskStore
-    _task_store = BoundedInMemoryTaskStore()
-    mcp._mcp_server.experimental.enable_tasks(store=_task_store)
     object.__setattr__(config, "_task_store", _task_store)
     logger.info(
-        "Experimental Tasks API enabled (default TTL %ds, ceiling %dh, max %d live tasks)",
+        "Tasks extension enabled (default TTL %ds, ceiling %dh, max %d live tasks)",
         _task_store._default_ttl_ms // 1000,
         _task_store._max_ttl_ms // 3_600_000,
         _task_store._max_live_tasks,
     )
 
     # Override list_tools so:
-    #   1. report_generate advertises taskSupport=optional (FastMCP's own
+    #   1. report_generate advertises taskSupport=optional (MCPServer's own
     #      list_tools does not expose the execution field).
     #   2. The response is filtered by the calling token's scopes -- a
     #      monitoring-only token sees only monitoring tools, a read-only
@@ -2791,18 +3221,31 @@ def run_server(
     #      source of truth, but pruning the catalog here keeps the LLM
     #      from receiving schemas for tools it cannot call (token-bloat
     #      and "model tries unauthorized tool" issues).
-    _orig_list_tools_handler = mcp._mcp_server.request_handlers.get(ListToolsRequest)
+    # SDK 2.0: request_handlers dict replaced by string-keyed
+    # add/get_request_handler with (ctx, params) handlers returning the
+    # bare result object (no ServerResult wrapper).
+    _orig_entry = mcp._lowlevel_server.get_request_handler("tools/list")
 
-    async def _list_tools_with_execution(req):
-        result = await _orig_list_tools_handler(req)
-        tools_list = result.root.tools
-        for tool in tools_list:
+    _tools_cache_ttl_ms = max(0, int(config.server.tools_list_cache_ttl)) * 1000
+
+    async def _list_tools_with_execution(ctx, params):
+        result = await _orig_entry.handler(ctx, params)
+        for tool in result.tools:
             if tool.name in _TASK_AUGMENTED_TOOLS:
                 tool.execution = ToolExecution(taskSupport="optional")
-        tools_list = _filter_tools_by_token(tools_list)
-        return ServerResult(ListToolsResult(tools=tools_list))
+        result.tools = _filter_tools_by_token(result.tools)
+        # 2026-07-28 CacheableResult freshness hint. The catalog only
+        # changes on restart, so a few minutes of client-side caching
+        # saves re-sending the whole schema set every session. Scope is
+        # pinned to "private" because the list above is filtered per
+        # calling token - a shared cache must never serve one token's
+        # catalog to another. Fields are ignored by pre-2026 clients.
+        result.ttl_ms = _tools_cache_ttl_ms
+        result.cache_scope = "private"
+        return result
 
-    mcp._mcp_server.request_handlers[ListToolsRequest] = _list_tools_with_execution
+    mcp._lowlevel_server.add_request_handler(
+        "tools/list", _orig_entry.params_type, _list_tools_with_execution)
 
     tool_count = _register_tools(
         mcp, client_manager, config.server.tools, config.server.disabled_tools,
@@ -2810,6 +3253,9 @@ def run_server(
         compact_output=config.server.compact_output,
         response_max_chars=config.server.response_max_chars,
         config=config,
+        # Effective transport, not config.server.transport - the CLI can
+        # override it, and stdio has no HTTP listener to link to.
+        transport=transport,
     )
     # Build the write-tools set for the tools/list scope filter once we
     # know everything that will ever be registered.
@@ -2824,49 +3270,8 @@ def run_server(
     else:
         logger.info("Registered %d tools", tool_count)
 
-    # ------------------------------------------------------------------
-    # MCP Resources — expose Zabbix data as browsable resources
-    # ------------------------------------------------------------------
-    default_srv = client_manager.default_server
+    _register_resources(mcp, client_manager)
 
-    if default_srv:
-        @mcp.resource(f"zabbix://{default_srv}/hosts")
-        async def resource_hosts() -> str:
-            """List of all monitored hosts."""
-            result = await asyncio.to_thread(
-                client_manager.call, default_srv, "host.get",
-                {"output": ["hostid", "host", "name", "status"], "sortfield": "name"},
-            )
-            return json.dumps(result, indent=2)
-
-        @mcp.resource(f"zabbix://{default_srv}/problems")
-        async def resource_problems() -> str:
-            """Currently active problems."""
-            result = await asyncio.to_thread(
-                client_manager.call, default_srv, "problem.get",
-                {"output": "extend", "recent": True, "sortfield": ["eventid"], "sortorder": "DESC", "limit": 100},
-            )
-            return json.dumps(result, indent=2)
-
-        @mcp.resource(f"zabbix://{default_srv}/hostgroups")
-        async def resource_hostgroups() -> str:
-            """All host groups."""
-            result = await asyncio.to_thread(
-                client_manager.call, default_srv, "hostgroup.get",
-                {"output": ["groupid", "name"], "sortfield": "name"},
-            )
-            return json.dumps(result, indent=2)
-
-        @mcp.resource(f"zabbix://{default_srv}/templates")
-        async def resource_templates() -> str:
-            """All templates."""
-            result = await asyncio.to_thread(
-                client_manager.call, default_srv, "template.get",
-                {"output": ["templateid", "host", "name"], "sortfield": "name"},
-            )
-            return json.dumps(result, indent=2)
-
-        logger.info("Registered MCP resources (zabbix://%s/...)", default_srv)
 
     # HTTP health endpoint (unauthenticated, returns minimal info only)
     if transport in ("http", "sse"):
@@ -2876,6 +3281,69 @@ def run_server(
         @mcp.custom_route("/health", methods=["GET"])
         async def http_health(request: Request) -> JSONResponse:
             return JSONResponse({"status": "ok"})
+
+        # Human-clickable download for a generated report. The MCP
+        # resource link (zabbix://reports/<id>) can only be fetched by an
+        # MCP client - somebody reading the conversation cannot open it.
+        # This serves the same bytes over the server's own HTTP(S)
+        # endpoint so the AI can hand out a link a person can click.
+        #
+        # The random report id (122 bits, uuid4) IS the credential (a
+        # capability URL): unguessable, single-report, dead as soon as it
+        # expires. It is deliberately reachable without a bearer token,
+        # because the point is that a human can open it in a browser.
+        # Operators who do not want that set [reporting].download_urls
+        # = false and keep the MCP link only.
+        if config is not None and config.reporting.download_urls:
+            from starlette.responses import Response as _StarletteResponse
+
+            # The report id in the URL is a bearer-style credential and
+            # the PDF is monitoring data. Over plaintext HTTP on a
+            # reachable interface both cross the network in the clear.
+            # That is the operator's call (the whole MCP API already
+            # travels the same way), but it should never be a surprise.
+            _pub = (config.server.public_url or "").strip()
+            _plain = _pub.startswith("http://") or (
+                not _pub
+                and host not in ("127.0.0.1", "localhost", "::1")
+                and not config.server.tls_cert_file
+            )
+            if _plain:
+                logger.warning(
+                    "Report download URLs will be served over plaintext HTTP (%s). The "
+                    "report id acts as a password and the PDF is unencrypted in "
+                    "transit. Terminate TLS in front of the server and set "
+                    "[server].public_url to the https address, or disable "
+                    "[reporting].download_urls.", _pub or f"http://{host}:{port}")
+            elif not _pub:
+                logger.warning(
+                    "Report download URLs are enabled but [server].public_url is not "
+                    "set, so no link can be built unless a proxy listed in "
+                    "trusted_proxies sends X-Forwarded-Host and X-Forwarded-Proto. "
+                    "Reports will be delivered as MCP resource links only.")
+
+            @mcp.custom_route("/reports/{report_id}.pdf", methods=["GET"])
+            async def http_report_download(request: Request):
+                store = getattr(config, "_report_store", None)
+                if store is None:
+                    return _StarletteResponse("Report downloads are not available.", status_code=404)
+                item = store.get(request.path_params["report_id"])
+                if item is None:
+                    return _StarletteResponse(
+                        "This report link has expired or does not exist.", status_code=404)
+                pdf_bytes, filename = item
+                return _StarletteResponse(
+                    pdf_bytes,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        # A capability URL must not be cached by shared
+                        # proxies or leaked through a Referer header.
+                        "Cache-Control": "no-store, private",
+                        "Referrer-Policy": "no-referrer",
+                        "X-Content-Type-Options": "nosniff",
+                    },
+                )
 
         # OAuth login + consent UI - only registered when [oauth].enabled.
         # Lives on the MCP port (same origin as the issuer URL) so the
@@ -2917,9 +3385,9 @@ def run_server(
 
     try:
         if transport in ("http", "sse"):
-            # Build the ASGI app from FastMCP for full control over TLS and CORS
+            # Build the ASGI app from MCPServer for full control over TLS and CORS
             if transport == "http":
-                asgi_app = mcp.streamable_http_app()
+                asgi_app = mcp.streamable_http_app(transport_security=transport_security)
             else:
                 asgi_app = mcp.sse_app()
 
@@ -2929,55 +3397,33 @@ def run_server(
             # would not trigger lazy cleanup on access. Done by wrapping
             # the original lifespan context manager (Starlette 1.0+ no
             # longer exposes the legacy on_startup / on_shutdown lists).
-            from contextlib import asynccontextmanager
-            from zabbix_mcp.task_store import run_periodic_cleanup as _run_cleanup
-            _orig_lifespan_ctx = asgi_app.router.lifespan_context
+            if _task_store is not None:
+                from contextlib import asynccontextmanager
+                from zabbix_mcp.task_store import run_periodic_cleanup as _run_cleanup
+                _orig_lifespan_ctx = asgi_app.router.lifespan_context
 
-            @asynccontextmanager
-            async def _lifespan_with_cleanup(app):
-                async with _orig_lifespan_ctx(app) as state:
-                    cleanup_task = asyncio.create_task(_run_cleanup(_task_store))
-                    try:
-                        yield state
-                    finally:
-                        cleanup_task.cancel()
+                @asynccontextmanager
+                async def _lifespan_with_cleanup(app):
+                    async with _orig_lifespan_ctx(app) as state:
+                        cleanup_task = asyncio.create_task(_run_cleanup(_task_store))
                         try:
-                            await cleanup_task
-                        except (asyncio.CancelledError, Exception):
-                            pass
+                            yield state
+                        finally:
+                            cleanup_task.cancel()
+                            try:
+                                await cleanup_task
+                            except (asyncio.CancelledError, Exception):
+                                pass
 
-            asgi_app.router.lifespan_context = _lifespan_with_cleanup
+                asgi_app.router.lifespan_context = _lifespan_with_cleanup
 
             # Capture client IP in context var for token IP allowlist checks.
             # When behind a reverse proxy listed in [server].trusted_proxies,
             # honor the first entry of X-Forwarded-For (the original client);
             # otherwise the raw TCP peer is used so an untrusted client
             # cannot impersonate an arbitrary IP via XFF.
-            from zabbix_mcp.token_store import current_client_ip as _cip_var, current_token_info as _cti_var
-            _inner_app = asgi_app
-            _trusted_proxies = set(config.server.trusted_proxies or [])
-
-            async def _client_ip_middleware(scope, receive, send):
-                _cti_var.set(None)
-                peer = None
-                if scope["type"] in ("http", "websocket"):
-                    client = scope.get("client")
-                    if client:
-                        peer = client[0]
-                        if peer in _trusted_proxies:
-                            headers = dict(scope.get("headers", []))
-                            xff = headers.get(b"x-forwarded-for", b"").decode()
-                            if xff:
-                                first = xff.split(",")[0].strip()
-                                if first:
-                                    peer = first
-                _cip_var.set(peer)
-                try:
-                    await _inner_app(scope, receive, send)
-                finally:
-                    _cti_var.set(None)
-                    _cip_var.set(None)
-            asgi_app = _client_ip_middleware
+            asgi_app = _make_request_context_middleware(
+                asgi_app, config.server.trusted_proxies or [])
 
             # Apply IP allowlist middleware if configured
             if config.server.allowed_hosts:

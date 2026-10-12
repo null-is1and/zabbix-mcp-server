@@ -35,6 +35,18 @@ try:
     REPORTING_AVAILABLE = True
 except ImportError:
     REPORTING_AVAILABLE = False
+except OSError as _exc:
+    # weasyprint is installed but a native library it dlopen()s at import
+    # time (Pango, GDK-PixBuf, ...) is missing. That raises OSError, not
+    # ImportError - without this branch it propagates out of server startup
+    # and takes the whole MCP server down instead of just disabling reports.
+    REPORTING_AVAILABLE = False
+    logger.warning(
+        "PDF reporting disabled: weasyprint is installed but a system library "
+        "it needs could not be loaded (%s). Install weasyprint's OS "
+        "dependencies (Pango / GDK-PixBuf) to enable report_generate.",
+        _exc,
+    )
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 # Custom templates added via the admin portal live here. `load_custom_templates`
