@@ -1,0 +1,2854 @@
+{
+ "methods": {
+  "host.get": {
+   "object": "host",
+   "sortfield": [
+    "hostid",
+    "host",
+    "name",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "applicationids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.0"
+    },
+    "dserviceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": null
+    },
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "httptestids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inheritedTags": {
+     "type": "boolean",
+     "since": null
+    },
+    "interfaceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "maintenanceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "monitored_hosts": {
+     "type": "flag",
+     "since": null
+    },
+    "proxy_groupids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "proxy_hosts": {
+     "type": "flag",
+     "since": null,
+     "removed": "7.0"
+    },
+    "proxyids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "searchInventory": {
+     "type": "object",
+     "since": null
+    },
+    "severities": {
+     "type": "integer/array",
+     "since": null
+    },
+    "tags": {
+     "type": "object/array",
+     "since": null
+    },
+    "templated_hosts": {
+     "type": "flag",
+     "since": null
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "withProblemsSuppressed": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_applications": {
+     "type": "flag",
+     "since": null,
+     "removed": "6.0"
+    },
+    "with_graph_prototypes": {
+     "type": "flag",
+     "since": null
+    },
+    "with_graphs": {
+     "type": "flag",
+     "since": null
+    },
+    "with_httptests": {
+     "type": "flag",
+     "since": null
+    },
+    "with_item_prototypes": {
+     "type": "flag",
+     "since": null
+    },
+    "with_items": {
+     "type": "flag",
+     "since": null
+    },
+    "with_monitored_httptests": {
+     "type": "flag",
+     "since": null
+    },
+    "with_monitored_items": {
+     "type": "flag",
+     "since": null
+    },
+    "with_monitored_triggers": {
+     "type": "flag",
+     "since": null
+    },
+    "with_simple_graph_item_prototypes": {
+     "type": "flag",
+     "since": null
+    },
+    "with_simple_graph_items": {
+     "type": "flag",
+     "since": null
+    },
+    "with_triggers": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectApplications": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectDashboards": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectDiscoveries": {
+     "type": "query",
+     "since": null
+    },
+    "selectDiscoveryData": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectDiscoveryRule": {
+     "type": "query",
+     "since": null
+    },
+    "selectDiscoveryRules": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectGraphs": {
+     "type": "query",
+     "since": null
+    },
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostDiscovery": {
+     "type": "query",
+     "since": null
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectHttpTests": {
+     "type": "query",
+     "since": null
+    },
+    "selectInheritedTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectInterfaces": {
+     "type": "query",
+     "since": null
+    },
+    "selectInventory": {
+     "type": "query",
+     "since": null
+    },
+    "selectItems": {
+     "type": "query",
+     "since": null
+    },
+    "selectMacros": {
+     "type": "query",
+     "since": null
+    },
+    "selectParentTemplates": {
+     "type": "query",
+     "since": null
+    },
+    "selectScreens": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectTriggers": {
+     "type": "query",
+     "since": null
+    },
+    "selectValueMaps": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "filter and search: 'Supports additional properties: Host interface properties' (7.4); filter does not support text-type properties, search only string/text",
+    "searchInventory: separate search object for host inventory properties",
+    "limitSelects applies to selectParentTemplates (sorted by host), selectInterfaces, selectItems (name), selectDiscoveryRules (name), selectTriggers (description), selectGraphs (name), selectDashboards (name)",
+    "selectGroups was replaced by selectHostGroups in 6.2 (deprecated 6.2-7.0, gone from the 7.2 page)",
+    "5.0 page additionally lists applicationids, with_applications, selectApplications, selectScreens (all gone from 6.0 page); proxy_hosts gone from 7.0 page, proxy_groupids added in 7.0",
+    "selectDiscoveries: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryRules` instead.)",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectHostGroups` instead.)",
+    "selectHostDiscovery: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryData` instead.)"
+   ]
+  },
+  "hostgroup.get": {
+   "object": "hostgroup",
+   "sortfield": [
+    "groupid",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "maintenanceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "monitored_hosts": {
+     "type": "flag",
+     "since": null,
+     "removed": "7.2"
+    },
+    "real_hosts": {
+     "type": "flag",
+     "since": null,
+     "removed": "7.2"
+    },
+    "templated_hosts": {
+     "type": "flag",
+     "since": null,
+     "removed": "6.2"
+    },
+    "templateids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.2"
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "with_applications": {
+     "type": "flag",
+     "since": null,
+     "removed": "6.0"
+    },
+    "with_graph_prototypes": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_graphs": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_hosts": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_hosts_and_templates": {
+     "type": "flag",
+     "since": null,
+     "removed": "6.2"
+    },
+    "with_httptests": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_item_prototypes": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_items": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_monitored_hosts": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_monitored_httptests": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_monitored_items": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_monitored_triggers": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_simple_graph_item_prototypes": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_simple_graph_items": {
+     "type": "boolean",
+     "since": null
+    },
+    "with_triggers": {
+     "type": "boolean",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectDiscoveryData": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectDiscoveryRule": {
+     "type": "query",
+     "since": null,
+     "removed": "7.0"
+    },
+    "selectDiscoveryRules": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectGroupDiscoveries": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectGroupDiscovery": {
+     "type": "query",
+     "since": null,
+     "removed": "7.0"
+    },
+    "selectHostPrototypes": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectTemplates": {
+     "type": "query",
+     "since": null,
+     "removed": "6.2"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "6.2 renamed real_hosts -> with_hosts and monitored_hosts -> with_monitored_hosts (old names deprecated 6.2-7.0, gone from 7.2 page); templated_hosts, with_hosts_and_templates, templateids, selectTemplates gone from 6.2 page (template groups split out)",
+    "7.0 replaced selectGroupDiscovery -> selectGroupDiscoveries and selectDiscoveryRule -> selectDiscoveryRules, added selectHostPrototypes; 7.4 added selectDiscoveryData and deprecated selectGroupDiscoveries",
+    "with_* parameters are typed boolean on the 7.4 page (host.get uses flag for the same names)",
+    "monitored_hosts: marked deprecated on pages 6.2-7.0 (deprecated, please use `with_monitored_hosts` instead.)",
+    "real_hosts: marked deprecated on pages 6.2-7.0 (deprecated, please use `with_hosts` instead.)",
+    "selectGroupDiscoveries: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryData` instead.)"
+   ]
+  },
+  "hostinterface.get": {
+   "object": "hostinterface",
+   "sortfield": [
+    "interfaceid",
+    "dns",
+    "ip"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "interfaceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectItems": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "limitSelects applies to selectItems",
+    "6.2 page lists a stray 'nodeids' (string/array) row inside the common-parameters block with no description (documentation leftover, nodeids was dropped from the API in 2.4); excluded from params"
+   ]
+  },
+  "item.get": {
+   "object": "item",
+   "sortfield": [
+    "itemid",
+    "name",
+    "key_",
+    "delay",
+    "history",
+    "trends",
+    "type",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "application": {
+     "type": "string",
+     "since": null,
+     "removed": "6.0"
+    },
+    "applicationids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.0"
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": "6.0"
+    },
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "group": {
+     "type": "string",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "host": {
+     "type": "string",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inherited": {
+     "type": "boolean",
+     "since": null
+    },
+    "inheritedTags": {
+     "type": "boolean",
+     "since": "8.0"
+    },
+    "interfaceids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "monitored": {
+     "type": "boolean",
+     "since": null
+    },
+    "proxyids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "tags": {
+     "type": "array",
+     "since": "6.0"
+    },
+    "templated": {
+     "type": "boolean",
+     "since": null
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "webitems": {
+     "type": "flag",
+     "since": null
+    },
+    "with_triggers": {
+     "type": "boolean",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectApplications": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectDiscoveryData": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectDiscoveryRule": {
+     "type": "query",
+     "since": null
+    },
+    "selectGraphs": {
+     "type": "query",
+     "since": null
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectInheritedTags": {
+     "type": "query",
+     "since": "8.0"
+    },
+    "selectInterfaces": {
+     "type": "query",
+     "since": null
+    },
+    "selectItemDiscovery": {
+     "type": "query",
+     "since": null
+    },
+    "selectPreprocessing": {
+     "type": "query",
+     "since": null
+    },
+    "selectTags": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectTriggers": {
+     "type": "query",
+     "since": null
+    },
+    "selectValueMap": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "filter: 'Supports additional properties: host - technical name of the host that the item belongs to' (7.4); does not support text-type properties",
+    "5.0 page additionally lists application, applicationids, selectApplications (gone from 6.0 page); 6.0 added tags/evaltype/selectTags/selectValueMap",
+    "8.0 added inheritedTags and selectInheritedTags; selectItemDiscovery deprecated since 7.4 in favour of selectDiscoveryData",
+    "selectItemDiscovery: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryData` instead.)"
+   ]
+  },
+  "trigger.get": {
+   "object": "trigger",
+   "sortfield": [
+    "triggerid",
+    "description",
+    "status",
+    "priority",
+    "lastchange",
+    "hostname"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "active": {
+     "type": "flag",
+     "since": null
+    },
+    "applicationids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.0"
+    },
+    "dependent": {
+     "type": "boolean",
+     "since": null
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": null
+    },
+    "expandComment": {
+     "type": "flag",
+     "since": null
+    },
+    "expandDescription": {
+     "type": "flag",
+     "since": null
+    },
+    "expandExpression": {
+     "type": "flag",
+     "since": null
+    },
+    "functions": {
+     "type": "string/array",
+     "since": null
+    },
+    "group": {
+     "type": "string",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "host": {
+     "type": "string",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inherited": {
+     "type": "boolean",
+     "since": null
+    },
+    "inheritedTags": {
+     "type": "boolean",
+     "since": "8.0"
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "lastChangeSince": {
+     "type": "timestamp",
+     "since": null
+    },
+    "lastChangeTill": {
+     "type": "timestamp",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "maintenance": {
+     "type": "boolean",
+     "since": null
+    },
+    "min_severity": {
+     "type": "integer",
+     "since": null
+    },
+    "monitored": {
+     "type": "flag",
+     "since": null
+    },
+    "only_true": {
+     "type": "flag",
+     "since": null
+    },
+    "skipDependent": {
+     "type": "flag",
+     "since": null
+    },
+    "tags": {
+     "type": "array",
+     "since": null
+    },
+    "templated": {
+     "type": "boolean",
+     "since": null
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "withAcknowledgedEvents": {
+     "type": "flag",
+     "since": null
+    },
+    "withLastEventUnacknowledged": {
+     "type": "flag",
+     "since": null
+    },
+    "withUnacknowledgedEvents": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectDependencies": {
+     "type": "query",
+     "since": null
+    },
+    "selectDiscoveryData": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectDiscoveryRule": {
+     "type": "query",
+     "since": null
+    },
+    "selectFunctions": {
+     "type": "query",
+     "since": null
+    },
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectInheritedTags": {
+     "type": "query",
+     "since": "8.0"
+    },
+    "selectItems": {
+     "type": "query",
+     "since": null
+    },
+    "selectLastEvent": {
+     "type": "query",
+     "since": null
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectTemplateGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectTriggerDiscovery": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "filter: 'Supports additional properties: host - technical name of the host; hostid - ID of the host that the trigger belongs to' (7.4)",
+    "sortfield value hostname is not a trigger property (sorts by host name)",
+    "selectGroups replaced by selectHostGroups/selectTemplateGroups in 6.2 (deprecated 6.2-7.0, gone from 7.2 page); 8.0 added inheritedTags/selectInheritedTags",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectHostGroups` or `selectTemplateGroups` instead.)",
+    "selectTriggerDiscovery: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryData` instead.)"
+   ]
+  },
+  "graph.get": {
+   "object": "graph",
+   "sortfield": [
+    "graphid",
+    "name",
+    "graphtype"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "expandName": {
+     "type": "flag",
+     "since": null
+    },
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inherited": {
+     "type": "boolean",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "templated": {
+     "type": "boolean",
+     "since": null
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectDiscoveryData": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectDiscoveryRule": {
+     "type": "query",
+     "since": null
+    },
+    "selectGraphDiscovery": {
+     "type": "query",
+     "since": null
+    },
+    "selectGraphItems": {
+     "type": "query",
+     "since": null
+    },
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectItems": {
+     "type": "query",
+     "since": null
+    },
+    "selectTemplateGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectTemplates": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "filter: 'Supports additional properties: host - technical name of the host; hostid - ID of the host that the graph belongs to' (7.4)",
+    "selectGroups replaced by selectHostGroups/selectTemplateGroups in 6.2 (deprecated 6.2-7.0, gone from 7.2 page); selectGraphDiscovery deprecated since 7.4 in favour of selectDiscoveryData",
+    "selectGraphDiscovery: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryData` instead.)",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectHostGroups` or `selectTemplateGroups` instead.)"
+   ]
+  },
+  "graphitem.get": {
+   "object": "graphitem",
+   "sortfield": [
+    "gitemid"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "limit",
+    "output",
+    "preservekeys",
+    "sortfield",
+    "sortorder"
+   ],
+   "params": {
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectGraphs": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Page lists only a subset of common parameters: no filter, search, searchByAny, searchWildcardsEnabled, startSearch, excludeSearch (same on 5.0-8.0 pages)",
+    "type parameter filters by graph item type (0 - simple, 2 - graph sum)"
+   ]
+  },
+  "template.get": {
+   "object": "template",
+   "sortfield": [
+    "hostid",
+    "host",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "evaltype": {
+     "type": "integer",
+     "since": null
+    },
+    "graphids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inheritedTags": {
+     "type": "boolean",
+     "since": "8.0"
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "parentTemplateids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "tags": {
+     "type": "object/array",
+     "since": null
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "with_graphs": {
+     "type": "flag",
+     "since": null
+    },
+    "with_httptests": {
+     "type": "flag",
+     "since": null
+    },
+    "with_items": {
+     "type": "flag",
+     "since": null
+    },
+    "with_triggers": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectApplications": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectDashboards": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectDiscoveries": {
+     "type": "query",
+     "since": null
+    },
+    "selectDiscoveryRules": {
+     "type": "query",
+     "since": "7.4"
+    },
+    "selectGraphs": {
+     "type": "query",
+     "since": null
+    },
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectHttpTests": {
+     "type": "query",
+     "since": null
+    },
+    "selectInheritedTags": {
+     "type": "query",
+     "since": "8.0"
+    },
+    "selectItems": {
+     "type": "query",
+     "since": null
+    },
+    "selectMacros": {
+     "type": "query",
+     "since": null
+    },
+    "selectParentTemplates": {
+     "type": "query",
+     "since": null
+    },
+    "selectScreens": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectTemplateGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectTemplates": {
+     "type": "query",
+     "since": null
+    },
+    "selectTriggers": {
+     "type": "query",
+     "since": null
+    },
+    "selectValueMaps": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "selectGroups replaced by selectTemplateGroups in 6.2 (deprecated 6.2-7.0, gone from 7.2 page); 5.0 page additionally lists selectApplications, selectScreens (gone from 6.0 page)",
+    "7.4 added selectDiscoveryRules and deprecated selectDiscoveries; 8.0 added inheritedTags/selectInheritedTags",
+    "selectDiscoveries: marked deprecated on pages 7.4-8.0 (deprecated, please use `selectDiscoveryRules` instead.)",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectTemplateGroups` instead.)",
+    "sortfield: the reference page lists 'status' but Zabbix 7.4.14 refuses it ('Sorting by field status not allowed', verified live)"
+   ]
+  },
+  "templategroup.get": {
+   "object": "templategroup",
+   "sortfield": [
+    "groupid",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "graphids": {
+     "type": "ID/array",
+     "since": "6.2"
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": "6.2"
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": "6.2"
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": "6.2"
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": "6.2"
+    },
+    "with_graph_prototypes": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_graphs": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_httptests": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_item_prototypes": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_items": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_simple_graph_item_prototypes": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_simple_graph_items": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_templates": {
+     "type": "boolean",
+     "since": "6.2"
+    },
+    "with_triggers": {
+     "type": "boolean",
+     "since": "6.2"
+    }
+   },
+   "selects": {
+    "selectTemplates": {
+     "type": "query",
+     "since": "6.2"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Object introduced in 6.2 (template groups split from host groups); no 5.0/6.0 documentation pages exist (HTTP 404), everything marked since 6.2"
+   ]
+  },
+  "usermacro.get": {
+   "object": "usermacro",
+   "sortfield": [
+    "macro"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "globalmacro": {
+     "type": "flag",
+     "since": null
+    },
+    "globalmacroids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostmacroids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "inherited": {
+     "type": "boolean",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectTemplateGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectTemplates": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Returns host/template macros by default; globalmacro flag switches to global macros (object globalmacro)",
+    "selectGroups replaced by selectHostGroups/selectTemplateGroups in 6.2 (deprecated 6.2-7.0, gone from 7.2 page); inherited parameter added in 6.0",
+    "sortfield description says 'Possible value: macro' (singular) on 5.0-6.2 pages",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectHostGroups` or `selectTemplateGroups` instead.)"
+   ]
+  },
+  "valuemap.get": {
+   "object": "valuemap",
+   "sortfield": [
+    "valuemapid",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "valuemapids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectMappings": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "valuemapids is the only method-specific parameter on all pages 5.0-8.0; value maps are host/template-level since 5.2 (hostid property appears from the 6.0 page)"
+   ]
+  },
+  "maintenance.get": {
+   "object": "maintenance",
+   "sortfield": [
+    "maintenanceid",
+    "name",
+    "maintenance_type",
+    "active_since",
+    "active_till"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "maintenanceids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectTimeperiods": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield gained active_since and active_till on the 7.0 page (5.0-6.4: maintenanceid, name, maintenance_type)",
+    "selectGroups replaced by selectHostGroups in 6.2 (deprecated 6.2-7.0, gone from 7.2 page)",
+    "selectGroups: marked deprecated on pages 6.2-7.0 (deprecated, please use `selectHostGroups` instead.)"
+   ]
+  }
+ },
+ "objects": {
+  "host": {
+   "props": {
+    "active_available": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.2"
+    },
+    "assigned_proxyid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "available": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "disable_until": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "error": {
+     "type": "string",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "errors_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "host": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "hostid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "inventory_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "ipmi_authtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "ipmi_available": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "ipmi_disable_until": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "ipmi_error": {
+     "type": "string",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "ipmi_errors_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "ipmi_password": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "ipmi_privilege": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "ipmi_username": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "jmx_available": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "jmx_disable_until": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "jmx_error": {
+     "type": "string",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "jmx_errors_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "maintenance_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "maintenance_status": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "maintenance_type": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "maintenanceid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "monitored_by": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "proxy_groupid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "proxy_hostid": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "7.0"
+    },
+    "proxyid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "snmp_available": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "snmp_disable_until": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "snmp_error": {
+     "type": "string",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "snmp_errors_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null,
+     "removed": "6.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_accept": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_connect": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_issuer": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk_identity": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_subject": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "Type column taken from the newest page listing the property; hostid/maintenanceid were typed 'string' on 5.0-6.4 pages, 'ID' from 7.0",
+    "5.0 page lists per-interface-type availability fields (available, error, errors_from, disable_until and ipmi_/jmx_/snmp_ variants) that moved to the hostinterface object in 6.0 (gone from the 6.0 host page); active_available added 6.2",
+    "7.0 replaced proxy_hostid with monitored_by + proxyid + proxy_groupid and added read-only assigned_proxyid",
+    "tls_psk is write-only (7.x pages); inventory fields are a nested 'Host inventory' sub-object and not listed here"
+   ]
+  },
+  "hostgroup": {
+   "props": {
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "groupid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "internal": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "6.2"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "groupid typed 'string' on 5.0-6.4 pages, 'ID' from 7.0; internal (read-only) gone from the 6.2 page; uuid added 6.0"
+   ]
+  },
+  "hostinterface": {
+   "props": {
+    "available": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "details": {
+     "type": "object",
+     "readonly": false,
+     "since": null
+    },
+    "disable_until": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "dns": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "error": {
+     "type": "string",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "errors_from": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "hostid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "interfaceid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "ip": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "main": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "port": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "useip": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "interfaceid/hostid typed 'string' before 7.0; availability fields (available, error, errors_from, disable_until) appear on the 6.0 page (moved from host object); details typed 'array' on 5.0/6.2/6.4 pages and 'object' on 6.0/7.x pages; the 'details' sub-object (SNMP) is not expanded here"
+   ]
+  },
+  "item": {
+   "props": {
+    "allow_traps": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "authtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "delay": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "error": {
+     "type": "string",
+     "readonly": true,
+     "since": null
+    },
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "follow_redirects": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "granularity": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "headers": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "history": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "hostid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "http_proxy": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "interfaceid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "inventory_link": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "ipmi_sensor": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "itemid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "jmx_endpoint": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "key_": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "lastclock": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "lastns": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "lastvalue": {
+     "type": "string",
+     "readonly": true,
+     "since": null
+    },
+    "logtimefmt": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "lookback_limit": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "master_itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "name_resolved": {
+     "type": "string",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "output_format": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "parameters": {
+     "type": "object/array",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "params": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "password": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "post_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "posts": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "prevvalue": {
+     "type": "string",
+     "readonly": true,
+     "since": null
+    },
+    "privatekey": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "publickey": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "query": {
+     "type": "object",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "query_fields": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "request_method": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "retrieve_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "snmp_oid": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "ssl_cert_file": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "ssl_key_file": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "ssl_key_password": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "state": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "status_codes": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "time_shift": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "trapper_hosts": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "trends": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "units": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "value_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "valuemapid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "verify_host": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "verify_peer": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "ID-typed properties (itemid, hostid, interfaceid, templateid, valuemapid, master_itemid) typed 'string'/'integer' before 7.0; headers typed 'object' before 7.0, 'array' from 7.0; parameters typed 'array' on 6.x pages, 'object/array' from 7.0",
+    "readonly reflects unconditional read-only only; many properties are documented as 'read-only for inherited/discovered objects' and are reported as readonly: false",
+    "8.0 added granularity, lookback_limit, time_shift and query (telemetry); 7.0 added read-only name_resolved; 6.0 added uuid and parameters; sub-objects (HTTP header, query field, tag, preprocessing, telemetry query) not listed"
+   ]
+  },
+  "trigger": {
+   "props": {
+    "comments": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "correlation_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "correlation_tag": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "error": {
+     "type": "string",
+     "readonly": true,
+     "since": null
+    },
+    "event_name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "expression": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "lastchange": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "manual_close": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "opdata": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "priority": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "recovery_expression": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "recovery_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "state": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "triggerid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "url_name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "value": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    }
+   },
+   "notes": [
+    "triggerid/templateid typed 'string' before 7.0; event_name and uuid added 6.0, url_name added 6.4; trigger tag sub-object not listed"
+   ]
+  },
+  "graph": {
+   "props": {
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "graphid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "graphtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "height": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "percent_left": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "percent_right": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "show_3d": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_legend": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_triggers": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_work_period": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "width": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "yaxismax": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "yaxismin": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "ymax_itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "ymax_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "ymin_itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "ymin_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "graphid/templateid/ymin_itemid/ymax_itemid typed 'string' before 7.0; uuid added 6.0"
+   ]
+  },
+  "graphitem": {
+   "props": {
+    "calc_fnc": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "color": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "drawtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "gitemid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "graphid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "sortorder": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "yaxisside": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "gitemid/graphid/itemid typed 'string' before 7.0"
+   ]
+  },
+  "template": {
+   "props": {
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "host": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "readme": {
+     "type": "text",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "vendor_name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "vendor_version": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "wizard_ready": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    }
+   },
+   "notes": [
+    "templateid typed 'string' before 7.0; uuid added 6.0; vendor_name/vendor_version added 6.4; readme and wizard_ready added 7.4; template tag sub-object not listed"
+   ]
+  },
+  "templategroup": {
+   "props": {
+    "groupid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.2"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    }
+   },
+   "notes": [
+    "Object introduced in 6.2 (no 5.0/6.0 pages); groupid typed 'string' on 6.2/6.4 pages, 'ID' from 7.0"
+   ]
+  },
+  "usermacro": {
+   "props": {
+    "automatic": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "config": {
+     "type": "object/array",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "hostid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "hostmacroid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "macro": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "value": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "This is the 'Host macro' table of the usermacro object page (host/template macros); global macros are catalogued as object 'globalmacro'",
+    "hostmacroid/hostid typed 'string' before 7.0; automatic added 6.2; config (object/array, 'Macro configuration' sub-object) added 7.4"
+   ]
+  },
+  "globalmacro": {
+   "props": {
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "globalmacroid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "macro": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "value": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "'Global macro' table of the usermacro object page; globalmacroid typed 'string' before 7.0"
+   ]
+  },
+  "valuemap": {
+   "props": {
+    "hostid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "mappings": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "valuemapid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    }
+   },
+   "notes": [
+    "valuemapid typed 'string' before 7.0; hostid and uuid appear on the 6.0 page (value maps became host/template-level in 5.2; the 6.0/6.2 pages typed hostid as 'id', 7.0+ as 'ID'); mappings is an array of 'Value mappings' sub-objects (not expanded)"
+   ]
+  },
+  "maintenance": {
+   "props": {
+    "active_since": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "active_till": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "maintenance_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "maintenanceid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tags_evaltype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "maintenanceid typed 'string' before 7.0; time period and problem tag sub-objects not listed; property set unchanged 5.0-8.0"
+   ]
+  }
+ },
+ "sources": [
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/host/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/host/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hostgroup/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hostgroup/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hostinterface/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hostinterface/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/item/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/item/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/trigger/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/trigger/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/graph/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/graph/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/graphitem/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/graphitem/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/template/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/template/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/templategroup/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/templategroup/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/usermacro/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/usermacro/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/valuemap/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/valuemap/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/maintenance/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/maintenance/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/maintenance/object"
+ ]
+}

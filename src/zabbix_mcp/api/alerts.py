@@ -33,6 +33,7 @@ This module covers the "Alerts & Actions" domain of the Zabbix API:
 
 from zabbix_mcp.api.types import MethodDef, ParamDef
 from zabbix_mcp.api.common import COMMON_GET_PARAMS, CREATE_PARAMS, UPDATE_PARAMS, DELETE_PARAMS
+from zabbix_mcp.api.action_payload import FILTER_CONTRACT
 
 # ---------------------------------------------------------------------------
 # action
@@ -90,7 +91,7 @@ _ACTION_METHODS: list[MethodDef] = [
             "'recovery_operations' and 'update_operations'. Set 'status' to 0 "
             "(enabled) or 1 (disabled). "
             "Symbolic names accepted for 'eventsource': TRIGGER, DISCOVERY, "
-            "AUTOREGISTRATION, INTERNAL, SERVICE."
+            "AUTOREGISTRATION, INTERNAL, SERVICE. " + FILTER_CONTRACT
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -102,7 +103,11 @@ _ACTION_METHODS: list[MethodDef] = [
             "Update an existing action. The params dict must include 'actionid'. "
             "Any properties not specified will remain unchanged. Commonly used to "
             "enable/disable actions (set status to 0 or 1), modify conditions, "
-            "or change notification recipients."
+            "or change notification recipients. An action as returned by action_get "
+            "(with selectFilter / selectOperations / ...) can be sent back as-is: the "
+            "server drops the read-only and source-specific fields Zabbix refuses on "
+            "write (eval_formula, formulaid outside custom expressions, operationid, "
+            "empty value2, esc_period on discovery actions, ...). " + FILTER_CONTRACT
         ),
         read_only=False,
         params=UPDATE_PARAMS,
@@ -142,13 +147,13 @@ _ALERT_GET_EXTRA: list[ParamDef] = [
         "Return only alerts for the given host IDs.",
     ),
     ParamDef(
-        "time_from", "int",
-        "Return only alerts generated after this Unix timestamp (inclusive). "
+        "time_from", "timestamp",
+        "Return only alerts generated after this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive). "
         "Useful for auditing recent notification delivery.",
     ),
     ParamDef(
-        "time_till", "int",
-        "Return only alerts generated before this Unix timestamp (inclusive).",
+        "time_till", "timestamp",
+        "Return only alerts generated before this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
     ),
 ]
 

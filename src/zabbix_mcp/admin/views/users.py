@@ -28,6 +28,23 @@ logger = logging.getLogger("zabbix_mcp.admin")
 BULK_DELETE_MAX = 500
 
 
+def _parse_timezone(raw) -> tuple[str, str | None]:
+    """Coerce the optional ``timezone`` form field (issue #75).
+
+    Returns ``(normalised_name, None)`` for a valid zone, ``("", None)``
+    for an empty field (= no key written) and ``("", error_message)``
+    for an unknown zone. Same shape as the server / token forms.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return "", None
+    from zabbix_mcp.timezones import validate_timezone
+    try:
+        return validate_timezone(text), None
+    except ValueError as exc:
+        return "", f"Time zone is invalid: {exc}"
+
+
 def _get_admin_users(config_path: str) -> dict:
     """Read [admin.users.*] from config."""
     if not TOMLKIT_AVAILABLE:
@@ -75,11 +92,13 @@ async def user_create(request: Request) -> Response:
     username = str(form.get("username", "")).strip().lower()
     password = str(form.get("password", ""))
     role = str(form.get("role", "viewer"))
+    timezone_raw = str(form.get("timezone", "") or "").strip()
 
     form_ctx = {
         "active": "users",
         "form_username": username,
         "form_role": role,
+        "form_timezone": timezone_raw,
         "existing_usernames": existing_usernames,
     }
 
@@ -125,6 +144,16 @@ async def user_create(request: Request) -> Response:
     if role not in ("admin", "operator", "viewer"):
         role = "viewer"
 
+    # Optional zone for the OAuth clients this user authorizes (issue
+    # #75). Empty = no key, so the consent step falls back to the
+    # browser's zone and then the server's.
+    timezone_name, timezone_err = _parse_timezone(timezone_raw)
+    if timezone_err:
+        return admin_app.render("users/create.html", request, {
+            **form_ctx,
+            "error": timezone_err,
+        })
+
     # Check if user exists
     existing = _get_admin_users(admin_app.config_path)
     if username in existing:
@@ -144,6 +173,8 @@ async def user_create(request: Request) -> Response:
         user_table = tomlkit.table()
         user_table["password_hash"] = password_hash
         user_table["role"] = role
+        if timezone_name:
+            user_table["timezone"] = timezone_name
         admin["users"][username] = user_table
         save_config_document(admin_app.config_path, doc)
         logger.info("User '%s' created (role: %s) by %s", username, role, session.user)
@@ -193,6 +224,8 @@ async def user_detail(request: Request) -> Response:
         current_password = str(form.get("current_password", "")).strip()
         new_role = str(form.get("role", "")).strip()
         current_role = user.get("role", "viewer")
+        timezone_raw = str(form.get("timezone", "") or "").strip()
+        timezone_name, timezone_err = _parse_timezone(timezone_raw)
 
         error = None
 
@@ -231,12 +264,16 @@ async def user_detail(request: Request) -> Response:
         elif new_password and not any(c.isdigit() for c in new_password):
             error = "Password must contain at least one digit."
 
+        if not error and timezone_err:
+            error = timezone_err
+
         if error:
             return admin_app.render("users/create.html", request, {
                 "active": "users",
                 "edit_mode": True,
                 "edit_username": username,
                 "edit_role": user.get("role", "viewer"),
+                "edit_timezone": timezone_raw,
                 "is_self": is_self,
                 "error": error,
             })
@@ -250,6 +287,13 @@ async def user_detail(request: Request) -> Response:
 
             if new_role in ("admin", "operator", "viewer"):
                 user_section["role"] = new_role
+
+            # timezone (issue #75): a value is written, an empty field
+            # removes the key so the file never carries `timezone = ""`.
+            if timezone_name:
+                user_section["timezone"] = timezone_name
+            elif "timezone" in user_section:
+                del user_section["timezone"]
 
             save_config_document(admin_app.config_path, doc)
             logger.info("User '%s' updated by %s", username, session.user)
@@ -267,6 +311,7 @@ async def user_detail(request: Request) -> Response:
         "edit_mode": True,
         "edit_username": username,
         "edit_role": user.get("role", "viewer"),
+        "edit_timezone": user.get("timezone", "") or "",
         "is_self": is_self,
         "config_mtime": config_mtime(admin_app.config_path),
     })

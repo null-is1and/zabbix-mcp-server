@@ -171,7 +171,17 @@ def fetch_availability_data(
 # Common item keys for capacity metrics
 _CPU_KEYS = ["system.cpu.util", "system.cpu.util[,idle]"]
 _MEMORY_KEYS = ["vm.memory.utilization", "vm.memory.size[pused]"]
-_DISK_KEYS = ["vfs.fs.size[/,pused]", "vfs.fs.size[C:,pused]"]
+# Linux/Windows by Zabbix agent templates (6.0+) collect filesystem usage
+# as dependent items of vfs.fs.get, keyed vfs.fs.dependent.size[...]; the
+# plain vfs.fs.size[...] key is what older templates and hand-made items
+# use. item.get "search" is a substring match, so neither spelling finds
+# the other - look for both, newest first (#84).
+_DISK_KEYS = [
+    "vfs.fs.dependent.size[/,pused]",
+    "vfs.fs.dependent.size[C:,pused]",
+    "vfs.fs.size[/,pused]",
+    "vfs.fs.size[C:,pused]",
+]
 
 _METRIC_DEFS = [
     ("CPU Usage", _CPU_KEYS),

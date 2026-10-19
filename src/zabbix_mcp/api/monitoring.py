@@ -254,7 +254,8 @@ _HISTORY_GET = MethodDef(
         "every collected value and is the most granular data source in Zabbix. "
         "Always specify the 'history' parameter to select the correct data type "
         "(0=numeric float, 1=character/string, 2=log, 3=numeric unsigned, "
-        "4=text). Use 'time_from' and 'time_till' (Unix timestamps) to bound "
+        "4=text, 5=binary on 7.0+, 6=JSON on 8.0+; Zabbix assumes 3 when omitted). "
+        "Use 'time_from' and 'time_till' (Unix timestamp or ISO 8601) to bound "
         "the time range. Combine with 'itemids' or 'hostids' to target specific "
         "metrics. For long time ranges, consider using trend.get instead as it "
         "returns aggregated min/avg/max values and is more efficient."
@@ -271,17 +272,18 @@ _HISTORY_GET = MethodDef(
         ),
         ParamDef(
             "history", "int",
-            "History data type to retrieve: 0=numeric float (default), "
-            "1=character/string, 2=log, 3=numeric unsigned, 4=text. "
-            "Must match the item's type of information.",
+            "History data type to retrieve: 0=numeric float, 1=character/string, "
+            "2=log, 3=numeric unsigned (Zabbix default when omitted), 4=text, "
+            "5=binary (7.0+), 6=JSON (8.0+). Must match the item's value_type, "
+            "otherwise the result is empty.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only data collected after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only data collected after this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only data collected before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only data collected before this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
     ],
 )
@@ -312,7 +314,7 @@ _HISTORY_PUSH = MethodDef(
     description=(
         "Push historical data directly into Zabbix. This allows external systems "
         "to inject metric values. Each entry must include 'itemid', 'clock' "
-        "(Unix timestamp), 'ns' (nanoseconds), and 'value'. The item must exist "
+        "(Unix timestamp or ISO 8601 date-time), 'ns' (nanoseconds), and 'value'. The item must exist "
         "and be of type 'Zabbix trapper' or 'Dependent item'."
     ),
     read_only=False,
@@ -320,7 +322,7 @@ _HISTORY_PUSH = MethodDef(
         ParamDef(
             "items", "list",
             "Array of history objects to push. Each object must have: "
-            "'itemid' (str), 'clock' (int, Unix timestamp), 'ns' (int, nanoseconds), "
+            "'itemid' (str), 'clock' (Unix timestamp or ISO 8601 date-time), 'ns' (int, nanoseconds), "
             "'value' (str). Example: [{\"itemid\": \"12345\", \"clock\": 1609459200, "
             "\"ns\": 0, \"value\": \"42.5\"}]",
             required=True,
@@ -352,12 +354,12 @@ _TREND_GET = MethodDef(
             "Return only trend data for the given item IDs.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only trend data after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only trend data after this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only trend data before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only trend data before this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
     ],
 )
@@ -411,12 +413,12 @@ _EVENT_GET = MethodDef(
             "5=LLD rule.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only events generated after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only events generated after this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only events generated before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only events generated before this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC) (inclusive).",
         ),
         ParamDef(
             "value", "int",
@@ -532,12 +534,12 @@ _PROBLEM_GET = MethodDef(
             "2=discovered service, 3=autoregistration, 4=item, 5=LLD rule.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only problems created after this Unix timestamp.",
+            "time_from", "timestamp",
+            "Return only problems created after this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only problems created before this Unix timestamp.",
+            "time_till", "timestamp",
+            "Return only problems created before this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC).",
         ),
         ParamDef(
             "acknowledged", "bool",
@@ -775,12 +777,12 @@ _SLA_GETSLI = MethodDef(
             "Return SLI data only for these service IDs.",
         ),
         ParamDef(
-            "period_from", "int",
-            "Return SLI data starting from this Unix timestamp.",
+            "period_from", "timestamp",
+            "Return SLI data starting from this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC).",
         ),
         ParamDef(
-            "period_to", "int",
-            "Return SLI data up to this Unix timestamp.",
+            "period_to", "timestamp",
+            "Return SLI data up to this time (Unix timestamp or ISO 8601 date-time such as 2026-04-01T08:00:00Z; a value without a zone is read as UTC).",
         ),
     ],
 )

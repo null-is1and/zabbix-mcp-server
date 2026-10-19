@@ -1,6 +1,6 @@
 # Pre-release smoke runners
 
-Two scripts live here. Both target the running MCP server's HTTP transport
+The two smoke runners target the running MCP server's HTTP transport
 via the official `mcp` Python SDK; they are part of the pre-release ritual
 documented in `CONTRIBUTING.md`. Wire-compatible with any Zabbix MCP
 deployment, but the canonical target is the `Wiki-topics` test instance
@@ -50,6 +50,32 @@ What it catches: tool description / UX bugs that fool LLMs even when the
 synthetic runner passes. v1.26 caught that the original `CREATE_PARAMS`
 description lacked the explicit `{"params": {...}}` wrap example, which
 made gpt-4o-mini fail every write call before the description fix landed.
+
+## `build_get_contracts.py` / `audit_get_contracts_live.py` - get-method contracts
+
+`src/zabbix_mcp/api/get_contracts.json` (what every `*_get` tool offers in
+`output`, `filter`, `search`, `sortfield` and `extra_params`, and what the
+server refuses before the call) is generated, never edited by hand:
+
+```bash
+# merge the per-page catalogs collected from the API reference (5.0 ... 8.0)
+# and the live observations into the shipped file
+python3 scripts/build_get_contracts.py scripts/get_contracts_src/catalog_*.json \
+  --observed scripts/get_contracts_src/observed_*.json
+
+# check the catalog against a real server (every property, sort field and
+# select of every method, plus a filter / search probe per property);
+# writes get_contracts_observed_<version>.json into the current directory
+python3 scripts/audit_get_contracts_live.py https://zabbix.example.com <api-token>
+python3 scripts/audit_get_contracts_live.py https://zabbix.example.com Admin <password>
+```
+
+The audit ends with `0 problems` on every release the catalog claims to
+know; run it against each one before shipping a catalog change, then
+re-run the builder with the fresh `observed_*.json` files so what a server
+returns beyond the documentation (and what it refuses or ignores) is
+marked in the shipped file. Releases before 6.4 are logged in with the
+body `auth` field automatically.
 
 ## Pre-release ritual (recap)
 

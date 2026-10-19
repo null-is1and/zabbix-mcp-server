@@ -143,6 +143,12 @@
         </script>
 
         <div class="form-group">
+            <label class="form-label" for="timezone">Time zone <span class="tooltip-icon" tabindex="0" data-tooltip="Zone this client lives in. Wins over the server's zone. IANA name such as Europe/London, or UTC, or system. Empty = inherit from the Zabbix server entry.">&#x1F6C8;</span></label>
+            <input type="text" id="timezone" name="timezone" class="form-input" placeholder="Europe/London" value="{{ form_timezone | default('') }}" autocomplete="off" style="max-width:260px;">
+            <div class="form-hint">Zone this client lives in. Wins over the server's zone.</div>
+        </div>
+
+        <div class="form-group">
             <label class="form-label" for="ip_allowlist">Token IP Restriction <span class="tooltip-icon" tabindex="0" data-tooltip="One IPv4/IPv6 address or CIDR range per line. Empty = any client IP. Layered AFTER the global server-level allowlist - this can only narrow, never widen.">&#x1F6C8;</span></label>
             <textarea id="ip_allowlist" name="ip_allowlist" class="form-textarea" rows="4" placeholder="192.168.1.0/24&#10;10.0.0.1&#10;2001:db8::/32&#10;Leave empty = no restriction"></textarea>
             <div class="form-hint">Complements the global IP allowlist in <a href="/settings">Settings</a> &mdash; cannot override it. If an IP is blocked globally, this token cannot allow it. One IP/CIDR per line.</div>
@@ -329,6 +335,7 @@ function makeScopeBubble(name, type, desc, groupName) {
 function renderScopeBubbles() {
     var allowedEl = document.getElementById('allowed-bubbles');
     var deniedEl = document.getElementById('denied-bubbles');
+    if (!allowedEl || !deniedEl) { return; }  // "token created" view has no scope form
     allowedEl.innerHTML = '';
     deniedEl.innerHTML = '';
 
