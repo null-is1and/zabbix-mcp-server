@@ -741,7 +741,14 @@ textarea.input-invalid {
     line-height: 0;
     color: transparent;
     user-select: none;
-    cursor: help;
+    /* Plain arrow, not `help`. The [data-tooltip] rule below sets
+       cursor: default and, with equal specificity and a later position,
+       won on every icon that carries its own tooltip - while icons
+       nested inside a tooltip-bearing label kept `help`. The result was
+       a question-mark cursor on some help icons and not others, which
+       reads as a glitch (and cannot be captured in a screenshot).
+       Reported 2026-10-02. One cursor everywhere. */
+    cursor: default;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2394a3b8' stroke-width='1.5'%3E%3Ccircle cx='8' cy='8' r='6.5'/%3E%3Cpath d='M5.8 6.2c0-1.2 1-2.2 2.2-2.2s2.2 1 2.2 2.2c0 .9-.5 1.4-1.2 1.8-.7.4-1 .7-1 1.4v.4'/%3E%3Ccircle cx='8' cy='12' r='.6' fill='%2394a3b8' stroke='none'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
@@ -778,7 +785,7 @@ textarea.input-invalid {
     line-height: 0;
     color: transparent;
     user-select: none;
-    cursor: help;
+    cursor: default;   /* same reasoning as .tooltip-icon */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23d97706' stroke-width='1.5'%3E%3Ccircle cx='8' cy='8' r='6.5'/%3E%3Cpath d='M8 4.5v4'/%3E%3Ccircle cx='8' cy='11.3' r='.6' fill='%23d97706' stroke='none'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
@@ -2556,3 +2563,30 @@ table.tokens-list td.col-actions .btn-sm {
     top: 50%;
     transform: translateY(-50%);
 }
+/* For elements sitting at the right edge of a card or the viewport
+   (badges in a server-card header): anchor the popover's right edge to
+   the element's right edge so it grows leftwards and stays on screen,
+   instead of centring under the element and running off the page. */
+[data-tooltip].tooltip-end::after {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+/* Mirror image for elements at the left edge. */
+[data-tooltip].tooltip-start::after {
+    left: 0;
+    right: auto;
+    transform: none;
+}
+/* Elements near the top of the viewport (header bar, first table row)
+   would push the popover above the fold; open it below instead. */
+[data-tooltip].tooltip-below::after {
+    bottom: auto;
+    top: calc(100% + 8px);
+}
+[data-tooltip].tooltip-below.tooltip-end::after,
+[data-tooltip].tooltip-below.tooltip-start::after {
+    transform: none;
+}
+/* These three are applied by the edge-flip script in base.html; the
+   markup never needs to know where on the page it will land. */

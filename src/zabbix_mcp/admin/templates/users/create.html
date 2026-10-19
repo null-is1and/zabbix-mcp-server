@@ -78,6 +78,13 @@
             <div class="form-hint">Determines what actions the user can perform in the admin portal.</div>
         </div>
 
+        <div class="form-group">
+            <label class="form-label" for="timezone">Time zone <span class="tooltip-icon" tabindex="0" data-tooltip="IANA name such as Europe/London, or UTC, or system. Carried by the OAuth tokens (ChatGPT, Claude connectors) this user authorizes, so their *_local times and zone-less dates use it.">&#x1F6C8;</span></label>
+            <input type="text" id="timezone" name="timezone" class="form-input" placeholder="Europe/London"
+                   value="{% if edit_mode %}{{ edit_timezone | default('') }}{% else %}{{ form_timezone | default('') }}{% endif %}" autocomplete="off" style="max-width:260px;">
+            <div class="form-hint">Used for OAuth clients this user authorizes. Empty = the zone the browser reports at consent, then the server's zone.</div>
+        </div>
+
         <div style="margin-top:24px; display:flex; gap:8px;">
             <button type="submit" class="btn btn-primary">{% if edit_mode %}Save Changes{% else %}Create User{% endif %}</button>
             <a href="/users" class="btn btn-ghost">Cancel</a>

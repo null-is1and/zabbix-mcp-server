@@ -886,5 +886,34 @@
     </script>
 
     {% block scripts %}{% endblock %}
+
+    <script>
+    // Tooltip edge flip. The CSS centres every [data-tooltip] popover
+    // under its element and opens it upwards, which runs off the page
+    // for anything near the right edge (badges on the right of a card
+    // header, last table columns) or the top (header bar). Measure on
+    // hover/focus and pick an anchor that stays on screen. Pure
+    // positioning: the markup and the tooltip text are untouched.
+    (function () {
+        var MAX = 380, PAD = 12;
+        function place(el) {
+            // An explicit side placement (tooltip-right) was chosen by hand;
+            // leave it alone.
+            if (el.classList.contains('tooltip-right')) { return; }
+            var r = el.getBoundingClientRect();
+            var mid = r.left + r.width / 2;
+            var w = Math.min(MAX, Math.max(160, (el.getAttribute('data-tooltip') || '').length * 7));
+            el.classList.toggle('tooltip-end', mid + w / 2 > window.innerWidth - PAD);
+            el.classList.toggle('tooltip-start', mid - w / 2 < PAD);
+            el.classList.toggle('tooltip-below', r.top < 140);
+        }
+        function handler(e) {
+            var el = e.target && e.target.closest ? e.target.closest('[data-tooltip]') : null;
+            if (el) { place(el); }
+        }
+        document.addEventListener('mouseover', handler, true);
+        document.addEventListener('focusin', handler, true);
+    })();
+    </script>
 </body>
 </html>

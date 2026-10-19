@@ -108,6 +108,13 @@
                 <div class="form-hint">Max characters per tool response before truncation (default: 50000, min: 5000). Increase for template export workflows (e.g. 200000 for medium templates, 500000 for large built-in templates).</div>
             </div>
         </div>
+        <div class="settings-row">
+            <div class="settings-label">Time Zone <span class="tooltip-icon" tabindex="0" data-tooltip="Default zone for Zabbix entries without one. Used for *_local timestamps and for dates sent without a zone. IANA name such as Europe/London, or UTC, or system. Empty = the Zabbix user's zone, then the frontend default, then this host.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="timezone" class="form-input" value="{{ settings.timezone | default('') }}" placeholder="Europe/London" autocomplete="off" style="max-width:260px;" {% if current_user_role == 'viewer' %}disabled{% endif %}>
+                <div class="form-hint">Default zone for Zabbix entries without one. A Zabbix entry's or token's own zone wins. Empty = the Zabbix user's zone, then the frontend default, then this host.</div>
+            </div>
+        </div>
         <div class="settings-row" id="public-url">
             <div class="settings-label">Public URL <span class="tooltip-icon" tabindex="0" data-tooltip="External URL clients use to reach this server. Required when bind host is 0.0.0.0 - OAuth discovery hands this out, so it must be reachable from the AI client's machine.">&#x1F6C8;</span></div>
             <div>
@@ -319,6 +326,189 @@
         {% if current_user_role != 'viewer' %}
         <div style="margin-top:16px;">
             <button type="submit" class="btn btn-primary btn-sm">Save Reporting Settings</button>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Section 4b: Report Delivery (issue #68) -->
+<div class="settings-section">
+    <h2 class="settings-section-title">&#x1F4E4; Report Delivery</h2>
+    <div class="form-hint" style="margin-bottom:12px;">
+        &#x26A0;&#xFE0F; All changes in this section require a <strong>server restart</strong> to take effect.
+    </div>
+    <div class="form-hint" style="margin-bottom:16px;">
+        By default <code>report_generate</code> returns the PDF inline, which can exceed an AI client's
+        context window on a large host group. These two channels hand the file over out of band instead -
+        the AI client then receives only a short receipt. <strong>Both are off until you configure them,
+        and the AI client never chooses the destination.</strong>
+    </div>
+
+    <form method="post" action="/settings/report_delivery">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
+        <div class="settings-row">
+            <div class="settings-label">Save to directory <span class="tooltip-icon" tabindex="0" data-tooltip="Absolute path the server may write generated PDFs into. Must exist and be writable by the service user. The filename is generated server-side (report type + host group + timestamp) and the resolved path is asserted to stay inside this directory, so a tool call can never write elsewhere. Leave empty to refuse save_to_file requests.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="output_dir" class="form-input" value="{{ settings.report_output_dir | default('') }}" placeholder="/var/lib/zabbix-mcp/reports">
+                <div class="form-hint">
+                    Enables <code>save_to_file: true</code>. <code>/var/lib/zabbix-mcp/reports</code> is
+                    created by the installer and works out of the box. Any other path must be added to the
+                    unit's <code>ReadWritePaths</code> (<code>systemctl edit zabbix-mcp-server</code>) -
+                    the service runs with <code>ProtectSystem=strict</code>, so everything else is
+                    read-only regardless of ownership. Empty = saving refused.
+                </div>
+                {% if settings.report_output_dir %}
+                <div class="text-sm" style="margin-top:4px;"><span class="badge badge-success">Saving enabled</span></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Link lifetime (s) <span class="tooltip-icon" tabindex="0" data-tooltip="How long a zabbix://reports/&lt;id&gt; link stays fetchable. Long enough for the user to click through in the conversation, short enough that a forgotten report does not sit in memory all day. 60 - 86400 seconds; default 3600 (1 hour).">&#x1F6C8;</span></div>
+            <div>
+                <input type="number" name="link_ttl" class="form-input" value="{{ settings.report_link_ttl | default(3600) }}" min="60" max="86400">
+                <div class="form-hint">
+                    How long a generated report stays fetchable through its resource link,
+                    after which it is deleted. 3600 = 1 hour, 900 = 15 minutes. Max 86400 (24 h).
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Stored reports limit <span class="tooltip-icon" tabindex="0" data-tooltip="Ceiling on reports held for resource links at any one time. When full, the oldest is dropped first - the report just generated matters more than one nobody fetched. Each report is typically a few hundred kB.">&#x1F6C8;</span></div>
+            <div>
+                <input type="number" name="link_max_reports" class="form-input" value="{{ settings.report_link_max | default(20) }}" min="1" max="500">
+                <div class="form-hint">
+                    How many reports may be held for links at once. When full the oldest is
+                    dropped first. Each is typically a few hundred kB.
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Clickable download link <span class="tooltip-icon" tabindex="0" data-tooltip="Publishes each generated report at /reports/&lt;id&gt;.pdf so the AI can hand the user a link they can open in a browser. A zabbix:// resource link can only be opened by an MCP client. The random report id is the only credential and dies with the link.">&#x1F6C8;</span></div>
+            <div>
+                <label class="toggle-label">
+                    <span class="toggle">
+                        <input type="checkbox" name="download_urls" {% if settings.report_download_urls is not defined or settings.report_download_urls %}checked{% endif %} {% if current_user_role != 'admin' %}disabled{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span>Serve reports at <code>/reports/&lt;id&gt;.pdf</code></span>
+                </label>
+                <div class="form-hint">
+                    Lets the AI hand out a link a person can click; the <code>zabbix://</code>
+                    resource link only works inside an MCP client. The link needs no token -
+                    the unguessable report id is the credential, and it expires with the link
+                    above. Requires <strong>Public URL</strong> (MCP Server section) to be set,
+                    unless a reverse proxy in <code>trusted_proxies</code> sends
+                    <code>X-Forwarded-Host</code>; nothing is guessed from the local bind.
+                    Behind a proxy that forwards individual paths, forward
+                    <code>/reports/</code> too or the link answers 404.
+                </div>
+            </div>
+        </div>
+        {% if current_user_role == 'admin' %}
+        <div style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary btn-sm">Save Directory Settings</button>
+        </div>
+        {% endif %}
+    </form>
+
+    <hr style="margin:24px 0; border:none; border-top:1px solid var(--border-color);">
+
+    <form method="post" action="/settings/report_email">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
+        <div class="settings-row">
+            <div class="settings-label">Email reports <span class="tooltip-icon" tabindex="0" data-tooltip="Lets an AI client ask for a generated report to be mailed as a PDF attachment instead of returned inline. Requires SMTP host, From address and at least one allowed recipient.">&#x1F6C8;</span></div>
+            <div>
+                <label class="toggle-label">
+                    <span class="toggle">
+                        <input type="checkbox" name="enabled" {% if settings.mail_enabled %}checked{% endif %} {% if current_user_role != 'admin' %}disabled{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span>Enable <code>email_to</code></span>
+                </label>
+                <div class="form-hint">When off, an email request is refused with an explanation.</div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">SMTP host <span class="tooltip-icon" tabindex="0" data-tooltip="Hostname or IP of the mail relay. Required when email is enabled.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="smtp_host" class="form-input" value="{{ settings.mail_smtp_host | default('') }}" placeholder="smtp.example.com">
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">SMTP port <span class="tooltip-icon" tabindex="0" data-tooltip="587 for STARTTLS (the usual choice), 465 for implicit TLS, 25 for an unauthenticated internal relay.">&#x1F6C8;</span></div>
+            <div>
+                <input type="number" name="smtp_port" class="form-input" value="{{ settings.mail_smtp_port | default(587) }}" min="1" max="65535">
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Encryption <span class="tooltip-icon" tabindex="0" data-tooltip="STARTTLS upgrades a plain connection (port 587). Implicit TLS connects encrypted from the start (port 465). Tick neither only for a trusted internal relay.">&#x1F6C8;</span></div>
+            <div>
+                <label class="toggle-label" style="margin-bottom:8px;">
+                    <span class="toggle">
+                        <input type="checkbox" name="use_starttls" {% if settings.mail_use_starttls %}checked{% endif %} {% if current_user_role != 'admin' %}disabled{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span>STARTTLS (port 587)</span>
+                </label>
+                <label class="toggle-label">
+                    <span class="toggle">
+                        <input type="checkbox" name="use_ssl" {% if settings.mail_use_ssl %}checked{% endif %} {% if current_user_role != 'admin' %}disabled{% endif %}>
+                        <span class="toggle-slider"></span>
+                    </span>
+                    <span>Implicit TLS (port 465)</span>
+                </label>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">SMTP username <span class="tooltip-icon" tabindex="0" data-tooltip="Leave empty for a relay that does not require authentication.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="smtp_user" class="form-input" value="{{ settings.mail_smtp_user | default('') }}" placeholder="(optional)">
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">SMTP password <span class="tooltip-icon" tabindex="0" data-tooltip="Stored in config.toml. Leave blank to keep the currently stored password - it is never sent back to this page.">&#x1F6C8;</span></div>
+            <div>
+                <input type="password" name="smtp_password" class="form-input" value="" placeholder="{% if settings.mail_password_configured %}(unchanged){% else %}(none){% endif %}" autocomplete="new-password">
+                <div class="form-hint">
+                    Leave blank to keep the stored password.
+                    {% if settings.mail_password_configured %}<span class="badge badge-success">Password configured</span>{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">From address <span class="tooltip-icon" tabindex="0" data-tooltip="Envelope sender for report emails. Required when email is enabled. Use an address your relay is allowed to send as.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="from_address" class="form-input" value="{{ settings.mail_from_address | default('') }}" placeholder="zabbix-mcp@example.com">
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">Allowed recipients <span class="tooltip-icon" tabindex="0" data-tooltip="THE SAFETY FENCE. A report is only mailed to an address matching this list. Without it an AI client could mail monitoring data to any address it invents. Comma-separated; an entry may glob a whole domain, e.g. *@example.com.">&#x1F6C8;</span></div>
+            <div>
+                <input type="text" name="allowed_recipients" class="form-input" value="{{ settings.mail_allowed_recipients | default('') }}" placeholder="ops@example.com, *@example.com">
+                <div class="form-hint">
+                    <strong>Required when email is enabled.</strong> The AI client picks the recipient; this
+                    list decides how far it may reach. Comma-separated:
+                    <ul style="margin:6px 0 0 18px; padding:0;">
+                        <li><code>*@yourcompany.com</code> - the usual choice: staff can ask for a report to
+                            be sent to any colleague, nowhere else.</li>
+                        <li><code>ops@yourcompany.com</code> - one fixed mailbox only.</li>
+                        <li><code>*</code> - any address at all. Works, but a confused or prompt-injected
+                            model could then mail monitoring data outside the company.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="settings-row">
+            <div class="settings-label">SMTP timeout (s) <span class="tooltip-icon" tabindex="0" data-tooltip="How long to wait for the mail relay before giving up. Default 30 seconds.">&#x1F6C8;</span></div>
+            <div>
+                <input type="number" name="timeout" class="form-input" value="{{ settings.mail_timeout | default(30) }}" min="5" max="300">
+            </div>
+        </div>
+        {% if current_user_role == 'admin' %}
+        <div style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary btn-sm">Save Email Settings</button>
         </div>
         {% endif %}
     </form>

@@ -79,6 +79,41 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 logger = logging.getLogger("zabbix_mcp.oauth")
 
 # ---------------------------------------------------------------------------
+# Portal roles that may write through OAuth-issued tokens. ``viewer`` is
+# documented as read-only everywhere (SECURITY.md, docs/OAUTH.md, the
+# consent screen) and the scope cap already keeps it to ``monitoring``
+# and ``extensions`` - but ``monitoring`` contains host / item / trigger
+# create-update-delete, so the cap alone never made a viewer read-only.
+# The role travels on the token and sets ``TokenInfo.read_only`` at
+# every request; anything that is not a known writing role is read-only
+# (an unknown or missing role fails closed).
+_WRITE_ROLES = frozenset({"admin", "operator"})
+
+
+def _read_only_for_role(role: str | None) -> bool:
+    return (role or "").strip().lower() not in _WRITE_ROLES
+
+
+def _timezone_or_none(name: Any) -> str | None:
+    """The zone an OAuth token carries (issue #75), or None.
+
+    The portal user's zone (or the one the browser reported at consent)
+    rides on the authorization code, the access token and the refresh
+    token next to ``_role``. Anything that is not a known zone resolves
+    to None so a stale or hand-edited value can never break a call -
+    the server then falls back to the Zabbix entry's and ``[server]``'s
+    zone the way a ``[tokens.X]`` entry without ``timezone`` does.
+    """
+    text = str(name or "").strip()
+    if not text:
+        return None
+    from zabbix_mcp.timezones import validate_timezone
+    try:
+        return validate_timezone(text)
+    except ValueError:
+        return None
+
+
 # Lifetime defaults (operator-overridable via [oauth] in config.toml)
 # ---------------------------------------------------------------------------
 
@@ -128,7 +163,10 @@ class _PendingAuthorization:
     seeing what the third-party client will be allowed to do.
     """
 
-    __slots__ = ("client", "params", "expires_at", "authenticated_subject", "authenticated_role")
+    __slots__ = (
+        "client", "params", "expires_at", "authenticated_subject", "authenticated_role",
+        "authenticated_timezone", "browser_timezone",
+    )
 
     def __init__(self, client: OAuthClientInformationFull, params: AuthorizationParams, ttl_seconds: int = _AUTH_CODE_TTL_SECONDS) -> None:
         self.client = client
@@ -138,6 +176,11 @@ class _PendingAuthorization:
         # Role of the operator who logged in (admin/operator/viewer);
         # caps which scopes this consent step can grant.
         self.authenticated_role: str | None = None
+        # Zone of the operator who logged in (issue #75): the portal
+        # user's explicit ``timezone`` and, separately, the one their
+        # browser reported on the login form. Resolved at consent.
+        self.authenticated_timezone: str | None = None
+        self.browser_timezone: str | None = None
 
 
 class ZmcpOAuthProvider:
@@ -250,6 +293,9 @@ class ZmcpOAuthProvider:
         request_id: str,
         granted_scopes: list[str],
         subject: str,
+        role: str = "",
+        timezone: str | None = None,
+        timezone_implicit: bool = False,
     ) -> str | None:
         """Finalize a logged-in user's consent; mint a code, return the redirect URL.
 
@@ -260,6 +306,11 @@ class ZmcpOAuthProvider:
             subject: Username / token id of the authenticated user; embedded
                 in issued access tokens so request handlers can attribute
                 tool calls back to the operator.
+            role: Admin-portal role of the user; sets ``read_only`` on the
+                issued tokens.
+            timezone: Zone the issued tokens resolve calls in (issue #75):
+                the user's portal zone, else the browser's zone at consent.
+                None = inherit from the Zabbix entry / ``[server]``.
 
         Returns:
             The full client redirect URL with ``code`` and ``state``
@@ -284,6 +335,9 @@ class ZmcpOAuthProvider:
         # Park the authenticated subject so exchange_authorization_code
         # can carry it onto the access token.
         object.__setattr__(code, "_subject", subject)  # type: ignore[arg-type]
+        object.__setattr__(code, "_role", role)  # type: ignore[arg-type]
+        object.__setattr__(code, "_timezone", _timezone_or_none(timezone))  # type: ignore[arg-type]
+        object.__setattr__(code, "_timezone_implicit", bool(timezone_implicit))  # type: ignore[arg-type]
         self._gc(self._codes, _MAX_LIVE_CODES)
         self._codes[code_str] = code
 
@@ -292,10 +346,16 @@ class ZmcpOAuthProvider:
         # fragments correctly, and re-encodes via urlunparse so we never
         # produce malformed output even when the registered redirect_uri
         # already carries a query string or hash fragment.
+        # RFC 9207 (SEP-2468): the authorization response SHOULD carry
+        # ``iss`` so the client can verify the code came from the
+        # authorization server it started the flow with, defeating
+        # mix-up attacks where a malicious AS replays a code obtained
+        # elsewhere. Clients that do not know the parameter ignore it.
         return construct_redirect_uri(
             str(pending.params.redirect_uri),
             code=code_str,
             state=pending.params.state,
+            iss=self._public_url,
         )
 
     # ------------------------------------------------------------------
@@ -392,6 +452,9 @@ class ZmcpOAuthProvider:
         # One-shot: code is consumed even on the happy path.
         self._codes.pop(authorization_code.code, None)
         subject = getattr(authorization_code, "_subject", "anonymous")
+        role = str(getattr(authorization_code, "_role", "") or "")
+        timezone = _timezone_or_none(getattr(authorization_code, "_timezone", None))
+        timezone_implicit = bool(getattr(authorization_code, "_timezone_implicit", False))
         # Per-client TTL override (read off OAuthClientInformationFull
         # via the same private-attribute trick we use for subject).
         access_ttl = self._client_access_ttl(client)
@@ -400,6 +463,9 @@ class ZmcpOAuthProvider:
             client_id=str(client.client_id or ""),
             scopes=list(authorization_code.scopes),
             subject=str(subject),
+            role=role,
+            timezone=timezone,
+            timezone_implicit=timezone_implicit,
             resource=authorization_code.resource,
             access_ttl_override=access_ttl,
             refresh_ttl_override=refresh_ttl,
@@ -497,11 +563,25 @@ class ZmcpOAuthProvider:
             for at_str, rt_str in list(self._access_to_refresh.items()):
                 if rt_str == refresh_token.token:
                     self._access_to_refresh.pop(at_str, None)
+        # The refresh token carries subject and role itself since
+        # v1.37.3, so a refresh after the access token expired does
+        # not lose either - before, it only lost the subject; losing
+        # the role would silently turn an operator read-only (or, with
+        # a permissive default, a viewer writable).
+        subject = str(getattr(refresh_token, "_subject", None) or subject)
+        role = str(getattr(refresh_token, "_role", "") or "")
+        # The zone rides the same way (issue #75); a refresh must not
+        # silently move the client back to the server's zone.
+        timezone = _timezone_or_none(getattr(refresh_token, "_timezone", None))
+        timezone_implicit = bool(getattr(refresh_token, "_timezone_implicit", False))
         new_scopes = list(scopes or refresh_token.scopes)
         return self._mint_token_pair(
             client_id=refresh_token.client_id,
             scopes=new_scopes,
             subject=str(subject),
+            role=role,
+            timezone=timezone,
+            timezone_implicit=timezone_implicit,
             resource=None,
             family_id=family,  # rotate within the same family
         )
@@ -521,13 +601,20 @@ class ZmcpOAuthProvider:
                     at.resource, self._public_url,
                 )
                 return None
+            # Portal role -> write permission. Before v1.37.3 every
+            # OAuth token was published writable, so a viewer with the
+            # "monitoring" scope could create, change and delete hosts,
+            # items and triggers on any writable server.
+            role = str(getattr(at, "_role", "") or "")
             self._publish_token_to_contextvar(
                 token=token,
                 client_id=at.client_id,
                 scopes=list(at.scopes),
                 subject=str(getattr(at, "_subject", "anonymous")),
-                read_only=False,
+                read_only=_read_only_for_role(role),
                 source="oauth",
+                timezone=_timezone_or_none(getattr(at, "_timezone", None)),
+                timezone_implicit=bool(getattr(at, "_timezone_implicit", False)),
             )
             return at
 
@@ -565,6 +652,8 @@ class ZmcpOAuthProvider:
         subject: str,
         read_only: bool,
         source: str,
+        timezone: str | None = None,
+        timezone_implicit: bool = False,
     ) -> None:
         """Bridge an OAuth AccessToken into the legacy ``TokenInfo`` contextvar.
 
@@ -587,6 +676,8 @@ class ZmcpOAuthProvider:
             expires_at=None,
             is_legacy=False,
             revoked=False,
+            timezone=timezone,
+            timezone_implicit=bool(timezone) and bool(timezone_implicit),
         )
         current_token_info.set(info)
 
@@ -640,6 +731,9 @@ class ZmcpOAuthProvider:
         scopes: list[str],
         subject: str,
         resource: str | None,
+        role: str = "",
+        timezone: str | None = None,
+        timezone_implicit: bool = False,
         family_id: str | None = None,
         access_ttl_override: int | None = None,
         refresh_ttl_override: int | None = None,
@@ -659,12 +753,19 @@ class ZmcpOAuthProvider:
         # Carry subject for downstream auth checks; not part of the
         # OAuth wire model so we attach it as a private attribute.
         object.__setattr__(access, "_subject", subject)  # type: ignore[arg-type]
+        object.__setattr__(access, "_role", role)  # type: ignore[arg-type]
+        object.__setattr__(access, "_timezone", _timezone_or_none(timezone))  # type: ignore[arg-type]
+        object.__setattr__(access, "_timezone_implicit", bool(timezone_implicit))  # type: ignore[arg-type]
         refresh = RefreshToken(
             token=refresh_str,
             client_id=client_id,
             scopes=scopes,
             expires_at=now + refresh_ttl,
         )
+        object.__setattr__(refresh, "_subject", subject)  # type: ignore[arg-type]
+        object.__setattr__(refresh, "_role", role)  # type: ignore[arg-type]
+        object.__setattr__(refresh, "_timezone", _timezone_or_none(timezone))  # type: ignore[arg-type]
+        object.__setattr__(refresh, "_timezone_implicit", bool(timezone_implicit))  # type: ignore[arg-type]
         self._gc(self._access_tokens, _MAX_LIVE_ACCESS_TOKENS)
         self._gc(self._refresh_tokens, _MAX_LIVE_REFRESH_TOKENS)
         self._access_tokens[access_str] = access
