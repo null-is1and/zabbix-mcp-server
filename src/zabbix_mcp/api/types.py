@@ -28,7 +28,7 @@ class ParamDef:
     """Definition of a single tool parameter."""
 
     name: str
-    param_type: str  # "str", "int", "bool", "list[str]", "dict"
+    param_type: str  # "str", "int", "timestamp" (int | ISO 8601 str), "bool", "list[str]", "list", "dict"
     description: str
     required: bool = False
     default: Any = None

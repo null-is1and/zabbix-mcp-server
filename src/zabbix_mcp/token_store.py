@@ -40,6 +40,14 @@ logger = logging.getLogger("zabbix_mcp.token_store")
 current_token_info: contextvars.ContextVar[Any] = contextvars.ContextVar("current_token_info", default=None)
 # Context variable to hold client IP for token IP allowlist checks
 current_client_ip: contextvars.ContextVar[str | None] = contextvars.ContextVar("current_client_ip", default=None)
+# Scheme + authority the current client actually reached us on ("https://mcp.example.com"),
+# taken from the request Host (or X-Forwarded-Host/-Proto from a trusted proxy). Used to
+# build report download links: the address the caller used is the only one it is known to
+# be able to reach, whereas the local bind may be a loopback address behind a proxy.
+# Never used for an authorization decision - the client controls Host, so a forged value
+# can only mislead the client that sent it.
+current_request_base: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "current_request_base", default=None)
 
 
 def check_token_authorization(
@@ -94,6 +102,28 @@ def check_token_authorization(
     return None
 
 
+def parse_expiry(value: str) -> datetime:
+    """Parse a token's ``expires_at`` into an aware UTC datetime.
+
+    The portal accepts ``YYYY-MM-DD``, ``YYYY-MM-DDTHH:MM:SS`` and the
+    same with a trailing ``Z``, and stores the string as typed.
+    ``datetime.fromisoformat`` only learned the ``Z`` suffix in Python
+    3.11; on 3.10 it raised ValueError, which the runtime check used to
+    log and then *ignore* - an expired token kept working. The suffix
+    is normalised here so every supported interpreter parses the same
+    strings, and a naive timestamp is read as UTC. Raises ValueError
+    for anything else; callers treat that as "not valid", never as
+    "no expiry".
+    """
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
 @dataclass
 class TokenInfo:
     """Parsed token definition from config."""
@@ -115,6 +145,14 @@ class TokenInfo:
     # LLM clients - operators must explicitly opt a token in for use by
     # programmatic / non-LLM consumers (Python scripts, n8n workflows).
     allow_raw_json: bool = False
+    # Zone this token's caller lives in (issue #75): ``<field>_local``
+    # renderings and zone-less date inputs use it. Wins over the Zabbix
+    # entry's and ``[server]``'s ``timezone``. None = inherit.
+    timezone: str | None = None
+    # True when ``timezone`` was only reported by a browser at OAuth
+    # consent, not written by an operator: it then ranks below the
+    # Zabbix entry's and ``[server]``'s zone instead of above them.
+    timezone_implicit: bool = False
     # Runtime stats (in-memory only, not persisted)
     last_used_at: str | None = None
     last_used_ip: str | None = None
@@ -133,9 +171,11 @@ class TokenInfo:
         if not self.expires_at:
             return False
         try:
-            return datetime.fromisoformat(self.expires_at) < datetime.now()
+            return parse_expiry(self.expires_at) < datetime.now(timezone.utc)
         except (ValueError, TypeError):
-            return False
+            # Unparseable: the runtime check refuses such a token, so
+            # "expired" is the honest badge.
+            return True
 
 
 class TokenStore:
@@ -205,6 +245,20 @@ class TokenStore:
                 )
                 allow_raw_json_val = False
 
+            # timezone: an unknown zone is ignored with a warning rather
+            # than refusing the token - a typo here must not lock a
+            # client out, it only falls back to the next level.
+            tz_val: str | None = None
+            raw_tz = cfg.get("timezone")
+            if isinstance(raw_tz, str) and raw_tz.strip():
+                from zabbix_mcp.timezones import validate_timezone
+                try:
+                    tz_val = validate_timezone(raw_tz)
+                except ValueError as e:
+                    logger.warning("Token '%s': %s; ignoring its timezone", token_id, e)
+            elif raw_tz not in (None, ""):
+                logger.warning("Token '%s' has non-string timezone=%r; ignoring", token_id, raw_tz)
+
             info = TokenInfo(
                 id=token_id,
                 name=cfg.get("name", token_id),
@@ -218,6 +272,7 @@ class TokenStore:
                 is_legacy=cfg.get("is_legacy", False),
                 revoked=not cfg.get("is_active", True),
                 allow_raw_json=allow_raw_json_val,
+                timezone=tz_val,
             )
 
             # Preserve runtime stats from existing token
@@ -288,14 +343,15 @@ class TokenStore:
         # Check expiration
         if info.expires_at:
             try:
-                expires = datetime.fromisoformat(info.expires_at)
-                if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=timezone.utc)
-                if datetime.now(timezone.utc) > expires:
-                    logger.warning("Token '%s' has expired (at %s)", info.id, info.expires_at)
-                    return None
-            except ValueError:
-                logger.warning("Token '%s' has invalid expires_at: %s", info.id, info.expires_at)
+                expires = parse_expiry(info.expires_at)
+            except (ValueError, TypeError):
+                # Fail closed. An expiry the server cannot read is not
+                # the same as no expiry - the operator set one.
+                logger.warning("Token '%s' has an unreadable expires_at (%r); refusing it", info.id, info.expires_at)
+                return None
+            if datetime.now(timezone.utc) > expires:
+                logger.warning("Token '%s' has expired (at %s)", info.id, info.expires_at)
+                return None
 
         # Check allowed IPs
         if info.allowed_ips and client_ip:
