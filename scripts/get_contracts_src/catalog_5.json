@@ -1,0 +1,1304 @@
+{
+ "methods": {
+  "service.get": {
+   "object": "service",
+   "sortfield": [
+    "created_at",
+    "name",
+    "serviceid",
+    "sortorder",
+    "status"
+   ],
+   "sortfield_versions": {
+    "created_at": {
+     "since": "6.0"
+    },
+    "serviceid": {
+     "since": "6.0"
+    },
+    "status": {
+     "since": "6.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "childids": {
+     "type": "ID/array"
+    },
+    "deep_parentids": {
+     "type": "flag",
+     "since": "6.0"
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": "6.0"
+    },
+    "parentids": {
+     "type": "ID/array"
+    },
+    "problem_tags": {
+     "type": "object/array",
+     "since": "6.0"
+    },
+    "serviceids": {
+     "type": "ID/array"
+    },
+    "slaids": {
+     "type": "ID/array",
+     "since": "6.0"
+    },
+    "tags": {
+     "type": "object/array",
+     "since": "6.0"
+    },
+    "without_problem_tags": {
+     "type": "flag",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectAlarms": {
+     "type": "query",
+     "removed": "6.0"
+    },
+    "selectChildren": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectDependencies": {
+     "type": "query",
+     "removed": "6.0"
+    },
+    "selectParent": {
+     "type": "query",
+     "removed": "6.0"
+    },
+    "selectParentDependencies": {
+     "type": "query",
+     "removed": "6.0"
+    },
+    "selectParents": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectProblemEvents": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectProblemTags": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectStatusRules": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectStatusTimeline": {
+     "type": "object/array",
+     "since": "6.0"
+    },
+    "selectTags": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectTimes": {
+     "type": "query",
+     "removed": "6.0"
+    },
+    "selectTrigger": {
+     "type": "query",
+     "removed": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Rewritten in 6.0: the 5.x parameters (triggerids, selectParent, selectDependencies, selectTimes, selectAlarms, selectTrigger) are gone and the tag/problem-tag/status-rule model arrived."
+   ]
+  },
+  "apmlog.get": {
+   "object": "apmlog",
+   "sortfield": [
+    "timestamp",
+    "traceid",
+    "spanid",
+    "trace_flags",
+    "severity_text",
+    "severity_number",
+    "service_name",
+    "resource_schema_url",
+    "scope_schema_url",
+    "scope_name",
+    "scope_version",
+    "event_name"
+   ],
+   "sortfield_versions": {
+    "timestamp": {
+     "since": "8.0"
+    },
+    "traceid": {
+     "since": "8.0"
+    },
+    "spanid": {
+     "since": "8.0"
+    },
+    "trace_flags": {
+     "since": "8.0"
+    },
+    "severity_text": {
+     "since": "8.0"
+    },
+    "severity_number": {
+     "since": "8.0"
+    },
+    "service_name": {
+     "since": "8.0"
+    },
+    "resource_schema_url": {
+     "since": "8.0"
+    },
+    "scope_schema_url": {
+     "since": "8.0"
+    },
+    "scope_name": {
+     "since": "8.0"
+    },
+    "scope_version": {
+     "since": "8.0"
+    },
+    "event_name": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "time_from": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "traceids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "spanids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "with_flags_on": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "with_flags_off": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "resource_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "scope_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "scope_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "log_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "log_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "offset": {
+     "type": "integer",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmmetric.get": {
+   "object": "apmmetric",
+   "sortfield": [
+    "type",
+    "resource_schema_url",
+    "scope_schema_url",
+    "scope_name",
+    "scope_version",
+    "service_name",
+    "metric_name",
+    "metric_unit",
+    "start_time_unix",
+    "time_unix"
+   ],
+   "sortfield_versions": {
+    "type": {
+     "since": "8.0"
+    },
+    "resource_schema_url": {
+     "since": "8.0"
+    },
+    "scope_schema_url": {
+     "since": "8.0"
+    },
+    "scope_name": {
+     "since": "8.0"
+    },
+    "scope_version": {
+     "since": "8.0"
+    },
+    "service_name": {
+     "since": "8.0"
+    },
+    "metric_name": {
+     "since": "8.0"
+    },
+    "metric_unit": {
+     "since": "8.0"
+    },
+    "start_time_unix": {
+     "since": "8.0"
+    },
+    "time_unix": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "time_from": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "types": {
+     "type": "integer/array",
+     "since": "8.0"
+    },
+    "with_flags_on": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "with_flags_off": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "resource_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "scope_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "scope_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "offset": {
+     "type": "integer",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmspan.get": {
+   "object": "apmspan",
+   "sortfield": [
+    "timestamp",
+    "traceid",
+    "spanid",
+    "parent_spanid",
+    "trace_state",
+    "span_name",
+    "span_kind",
+    "service_name",
+    "scope_name",
+    "scope_version",
+    "duration",
+    "status_code",
+    "status_message"
+   ],
+   "sortfield_versions": {
+    "timestamp": {
+     "since": "8.0"
+    },
+    "traceid": {
+     "since": "8.0"
+    },
+    "spanid": {
+     "since": "8.0"
+    },
+    "parent_spanid": {
+     "since": "8.0"
+    },
+    "trace_state": {
+     "since": "8.0"
+    },
+    "span_name": {
+     "since": "8.0"
+    },
+    "span_kind": {
+     "since": "8.0"
+    },
+    "service_name": {
+     "since": "8.0"
+    },
+    "scope_name": {
+     "since": "8.0"
+    },
+    "scope_version": {
+     "since": "8.0"
+    },
+    "duration": {
+     "since": "8.0"
+    },
+    "status_code": {
+     "since": "8.0"
+    },
+    "status_message": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "time_from": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "traceids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "spanids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "parent_spanids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "resource_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "span_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "span_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "min_duration": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "max_duration": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "offset": {
+     "type": "integer",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmtrace.get": {
+   "object": "apmtrace",
+   "sortfield": [
+    "timestamp",
+    "traceid",
+    "spanid",
+    "trace_state",
+    "span_name",
+    "span_kind",
+    "service_name",
+    "scope_name",
+    "scope_version",
+    "duration",
+    "status_code",
+    "status_message"
+   ],
+   "sortfield_versions": {
+    "timestamp": {
+     "since": "8.0"
+    },
+    "traceid": {
+     "since": "8.0"
+    },
+    "spanid": {
+     "since": "8.0"
+    },
+    "trace_state": {
+     "since": "8.0"
+    },
+    "span_name": {
+     "since": "8.0"
+    },
+    "span_kind": {
+     "since": "8.0"
+    },
+    "service_name": {
+     "since": "8.0"
+    },
+    "scope_name": {
+     "since": "8.0"
+    },
+    "scope_version": {
+     "since": "8.0"
+    },
+    "duration": {
+     "since": "8.0"
+    },
+    "status_code": {
+     "since": "8.0"
+    },
+    "status_message": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "time_from": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": "8.0"
+    },
+    "traceids": {
+     "type": "string/array",
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "resource_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "span_attributes": {
+     "type": "object/array",
+     "since": "8.0"
+    },
+    "span_attributes_evaltype": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "min_duration": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "max_duration": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "offset": {
+     "type": "integer",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "device.get": {
+   "object": "device",
+   "sortfield": [
+    "deviceid",
+    "name"
+   ],
+   "sortfield_versions": {
+    "deviceid": {
+     "since": "8.0"
+    },
+    "name": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "deviceids": {
+     "type": "ID/array",
+     "since": "8.0"
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": "8.0"
+    },
+    "roleids": {
+     "type": "ID/array",
+     "since": "8.0"
+    },
+    "usrgrpids": {
+     "type": "ID/array",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "serverinfo.get": {
+   "object": "serverinfo",
+   "sortfield": [],
+   "sortfield_versions": {},
+   "common": [
+    "output"
+   ],
+   "params": {
+    "serverid": {
+     "type": "ID",
+     "since": "8.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "New in 8.0."
+   ]
+  }
+ },
+ "objects": {
+  "service": {
+   "props": {
+    "algorithm": {
+     "type": "integer",
+     "readonly": false
+    },
+    "created_at": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "goodsla": {
+     "type": "float",
+     "readonly": false,
+     "removed": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false
+    },
+    "propagation_rule": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "propagation_value": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "readonly": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "serviceid": {
+     "type": "ID",
+     "readonly": true
+    },
+    "showsla": {
+     "type": "integer",
+     "readonly": false,
+     "removed": "6.0"
+    },
+    "sortorder": {
+     "type": "integer",
+     "readonly": false
+    },
+    "status": {
+     "type": "integer",
+     "readonly": true
+    },
+    "triggerid": {
+     "type": "string",
+     "readonly": false,
+     "removed": "6.0"
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "weight": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "5.x properties (triggerid, goodsla, showsla) removed in 6.0; 6.0 added algorithm values, weight, propagation and tags."
+   ]
+  },
+  "apmlog": {
+   "props": {
+    "timestamp": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "traceid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "spanid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "trace_flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "severity_text": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "severity_number": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "service_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "body": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_schema_url": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_schema_url": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_version": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "log_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "event_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmmetric": {
+   "props": {
+    "type": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_schema_url": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_version": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_schema_url": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "service_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "metric_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "metric_description": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "metric_unit": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "start_time_unix": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "time_unix": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "value": {
+     "type": "float",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "flags": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "exemplars": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "aggregation_temporality": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "is_monotonic": {
+     "type": "boolean",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "count": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "sum": {
+     "type": "float",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "bucket_counts": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "explicit_bounds": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "min": {
+     "type": "float",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "max": {
+     "type": "float",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scale": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "zero_count": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "positive_bucket_counts": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "positive_offset": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "negative_bucket_counts": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "negative_offset": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmspan": {
+   "props": {
+    "timestamp": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "traceid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "spanid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "parent_spanid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "trace_state": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_kind": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "service_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_version": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "duration": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "status_code": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "status_message": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "events": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "links": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "apmtrace": {
+   "props": {
+    "timestamp": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "traceid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "spanid": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "trace_state": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_kind": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "service_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "resource_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_name": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "scope_version": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_attributes": {
+     "type": "object",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "duration": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "status_code": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "status_message": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "events": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "links": {
+     "type": "array",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "span_count": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "error_count": {
+     "type": "integer",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "device": {
+   "props": {
+    "deviceid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "activated_at": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "lastaccess": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0."
+   ]
+  },
+  "serverinfo": {
+   "props": {
+    "serverid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "lastaccess": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "New in 8.0. Properties from the return values table of serverinfo.get (no object page)."
+   ]
+  }
+ },
+ "sources": [
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/service/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/service/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmlog/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmlog/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmmetric/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmmetric/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmspan/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmspan/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmtrace/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/apmtrace/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/device/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/device/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/serverinfo/get"
+ ]
+}

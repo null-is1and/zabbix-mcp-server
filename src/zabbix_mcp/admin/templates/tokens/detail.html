@@ -104,6 +104,12 @@
             </div>
 
             <div class="form-group">
+                <label class="form-label" for="timezone">Time zone <span class="tooltip-icon" tabindex="0" data-tooltip="Zone this client lives in. Wins over the server's zone. IANA name such as Europe/London, or UTC, or system. Empty = inherit from the Zabbix server entry.">&#x1F6C8;</span></label>
+                <input type="text" id="timezone" name="timezone" class="form-input" placeholder="Europe/London" value="{{ token.timezone or '' }}" autocomplete="off" style="max-width:260px;">
+                <div class="form-hint">Zone this client lives in. Wins over the server's zone.</div>
+            </div>
+
+            <div class="form-group">
                 <label class="form-label" for="ip_allowlist">Token IP Restriction <span class="tooltip-icon" tabindex="0" data-tooltip="One IPv4/IPv6 address or CIDR per line. Empty = any client IP. Layered AFTER the global server-level allowlist - this can only narrow, never widen.">&#x1F6C8;</span></label>
                 <textarea id="ip_allowlist" name="ip_allowlist" class="form-textarea" rows="3">{{ token.allowed_ips | join('\n') if token.allowed_ips else '' }}</textarea>
                 <div class="form-hint">Complements the global IP allowlist in <a href="/settings">Settings</a> &mdash; cannot override it. If an IP is blocked globally, this token cannot allow it. One IP/CIDR per line.</div>
@@ -158,6 +164,10 @@
             <div class="settings-row" style="grid-template-columns: 140px 1fr;">
                 <div class="settings-label">Created</div>
                 <div class="text-sm">{{ token.created_at }}</div>
+            </div>
+            <div class="settings-row" style="grid-template-columns: 140px 1fr;">
+                <div class="settings-label">Time zone</div>
+                <div class="monospace text-sm">{{ token.timezone or 'inherited' }}</div>
             </div>
         </div>
 

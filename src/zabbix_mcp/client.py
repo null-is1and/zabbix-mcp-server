@@ -27,7 +27,7 @@ import time
 from typing import Any
 
 from zabbix_utils import ZabbixAPI
-from zabbix_utils.exceptions import ProcessingError
+from zabbix_utils.exceptions import APINotSupported, ProcessingError
 
 # OpenSSL 3.0 (RHEL 9, Ubuntu 22.04+) disables unsafe legacy
 # renegotiation by default. Some older Zabbix HTTPS frontends still
@@ -154,6 +154,22 @@ class _RateLimiter:
             self._buckets[key] = calls
 
 
+_NEWER_RE = re.compile(r"Version of Zabbix API \[(\d+)\.(\d+)[^\]]*\] was not tested")
+
+
+def _newer_than_library(exc: BaseException) -> bool:
+    """True when zabbix-utils refused a release above its tested maximum
+    (its message names the version), not one below its minimum."""
+    from zabbix_utils.version import __max_supported__
+    if not isinstance(exc, APINotSupported):
+        return False
+    match = _NEWER_RE.search(str(exc))
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2))
+    return (major, minor) > tuple(int(x) for x in str(__max_supported__).split("."))
+
+
 class ClientManager:
     """Manages connections to multiple Zabbix servers with lazy connect and auto-reconnect.
 
@@ -170,12 +186,27 @@ class ClientManager:
         self._config = config
         self._clients: dict[str, ZabbixAPI] = {}
         self._versions: dict[str, str] = {}
+        # Zone Zabbix itself reports for a server (issue #75), cached per
+        # server: the API user's own zone, else the frontend default.
+        # "" = Zabbix had nothing explicit (user "default", frontend
+        # "system") or refused the lookup; absent = not asked yet.
+        self._zabbix_zones: dict[str, str] = {}
         self._rate_limiter = _RateLimiter(config.server.rate_limit)
         self._lock = threading.RLock()
 
     @property
     def server_names(self) -> list[str]:
         return list(self._config.zabbix_servers.keys())
+
+    @property
+    def skipped_servers(self) -> dict[str, str]:
+        """[zabbix.X] sections skipped at config load (name -> reason).
+
+        Empty on configs where every section validated. The admin
+        portal uses this to show "config error" instead of a
+        restart-cannot-fix-it "pending" state (issue #61).
+        """
+        return dict(getattr(self._config, "skipped_zabbix_servers", {}) or {})
 
     @property
     def default_server(self) -> str | None:
@@ -200,13 +231,59 @@ class ClientManager:
         # 300 s default matches Zabbix PHP frontend's max_execution_time
         # so expensive exports / long history.get ranges can complete.
         timeout = getattr(srv, "request_timeout", 300) or 300
-        api = ZabbixAPI(
-            url=srv.url,
-            ssl_context=_build_ssl_context(srv.verify_ssl),
-            skip_version_check=srv.skip_version_check,
-            timeout=timeout,
-        )
-        api.login(token=srv.api_token)
+        # zabbix-utils refuses anything below its __min_supported__ (6.0)
+        # unless told not to. That gate is relaxed ONLY for an entry the
+        # operator marked legacy_auth - the whole point of that flag is
+        # Zabbix 5.0-5.2 - and never widened for token auth, which keeps
+        # the operator-controlled skip_version_check as before.
+        legacy = getattr(srv, "legacy_auth", False)
+        try:
+            api = ZabbixAPI(
+                url=srv.url,
+                ssl_context=_build_ssl_context(srv.verify_ssl),
+                skip_version_check=srv.skip_version_check or legacy,
+                timeout=timeout,
+            )
+        except APINotSupported as exc:
+            # zabbix-utils also refuses a release NEWER than the one it was
+            # tested with (2.0.4 stops at 7.4, Zabbix 8.0 is on its way).
+            # This server carries its own 5.0 ... 8.0 catalog, so a newer
+            # frontend is connected anyway, with a warning; the lower gate
+            # (below 6.0) stays as it was.
+            if not _newer_than_library(exc):
+                raise
+            logger.warning(
+                "Zabbix server '%s' reports API version %s, newer than the zabbix-utils "
+                "library was tested with; connecting anyway", name, _NEWER_RE.search(str(exc)).group(0).split("[")[1].split("]")[0],
+            )
+            api = ZabbixAPI(
+                url=srv.url,
+                ssl_context=_build_ssl_context(srv.verify_ssl),
+                skip_version_check=True,
+                timeout=timeout,
+            )
+        if legacy:
+            # Hard version lock. Password login exists for releases that
+            # have no API tokens; on anything that has them it is just a
+            # password in a config file for no reason. The constructor
+            # has already fetched apiinfo.version, so this costs nothing.
+            if api.version >= 5.4:
+                raise ValueError(
+                    f"Zabbix server '{name}' reports version {api.version}, which "
+                    f"supports API tokens. 'legacy_auth' is only accepted for "
+                    f"Zabbix 5.0-5.2 - remove it and configure 'api_token'."
+                )
+            logger.warning(
+                "Zabbix server '%s' (Zabbix %s) uses LEGACY password login. This "
+                "Zabbix release is out of upstream support and the server holds a "
+                "user password instead of a revocable API token. Treat this entry "
+                "as a security risk and plan the upgrade.%s", name, api.version,
+                (" The URL is plain http://, so the password crosses the network "
+                 "in clear text on every login.") if srv.url.startswith("http://") else "",
+            )
+            api.login(user=srv.username, password=srv.password)
+        else:
+            api.login(token=srv.api_token)
 
         version = api.api_version()
         logger.info("Connected to '%s' - Zabbix %s", name, version)
@@ -233,7 +310,123 @@ class ClientManager:
             self._clients.pop(name, None)
             client = self._connect(name)
             self._clients[name] = client
+            # A reconnect sees the server as it is NOW - most visibly a
+            # Zabbix upgrade behind the same URL. Refresh the cached
+            # version alongside the cached connection, otherwise
+            # get_version() (and the admin pages reading it) keep
+            # reporting the pre-upgrade release even after Test
+            # Connection already logged the new one (issue #89).
+            self._versions[name] = str(client.api_version())
+            self._zabbix_zones.pop(name, None)
             return client
+
+    def get_zabbix_timezone(self, server: str) -> str:
+        """Zone Zabbix reports for *server*: the API user's own ``timezone``
+        when it is not ``default``, else the frontend ``default_timezone``
+        when it is not ``system``, else ``""``. Cached until a reconnect.
+
+        ``settings.get`` is readable by every user type on 7.x, but an
+        older or locked-down server may refuse it; a refusal is cached as
+        ``""`` so it is not retried on every call. A connection failure
+        is not cached and also yields ``""`` - the caller falls back to
+        the host zone for this one call.
+        """
+        cached = self._zabbix_zones.get(server)
+        if cached is not None:
+            return cached
+        from zabbix_mcp.timezones import ZABBIX_INHERIT
+        try:
+            # Outside the caching block on purpose: a server that cannot be
+            # reached right now must not be remembered as "has no zone".
+            client = self._get_client(server)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Could not read the time zone from '%s': %s", server, e)
+            return ""
+        zone = ""
+        try:
+            # The user behind the session. zabbix_utils sends
+            # user.checkAuthentication without the Authorization header
+            # (Zabbix 7.x rejects it otherwise) and returns the user object.
+            session = getattr(client, "_ZabbixAPI__session_id", None)
+            if session:
+                srv = self._config.zabbix_servers.get(server)
+                legacy = bool(getattr(srv, "legacy_auth", False)) if srv else False
+                try:
+                    me = client.user.checkAuthentication(
+                        **({"sessionid": session} if legacy else {"token": session})
+                    )
+                    user_zone = str((me or {}).get("timezone", "") or "")
+                    if user_zone.strip().lower() not in ZABBIX_INHERIT:
+                        zone = user_zone.strip()
+                except Exception as e:  # noqa: BLE001
+                    if self._is_connection_error(e):
+                        raise
+                    logger.debug("checkAuthentication timezone lookup failed on '%s': %s", server, e)
+            if not zone:
+                from zabbix_mcp.api.versions import unavailable_reason
+                version = self._versions.get(server)
+                if unavailable_reason("settings.get", version):
+                    logger.info("No settings.get on '%s' (Zabbix %s); no frontend zone to read", server, version)
+                else:
+                    try:
+                        settings = self._do_call(client, "settings.get", {"output": ["default_timezone"]})
+                        default_zone = str((settings or {}).get("default_timezone", "") or "")
+                        if default_zone.strip().lower() not in ZABBIX_INHERIT:
+                            zone = default_zone.strip()
+                    except Exception as e:  # noqa: BLE001
+                        if self._is_connection_error(e):
+                            raise
+                        logger.info("settings.get refused on '%s' (%s); no Zabbix zone, falling back", server, e)
+        except Exception as e:  # noqa: BLE001 - connection-class failure: do not cache
+            logger.warning("Could not read the time zone from '%s': %s", server, e)
+            return ""
+        self._zabbix_zones[server] = zone
+        return zone
+
+    @staticmethod
+    def _is_connection_error(exc: BaseException) -> bool:
+        """True for a failure to reach the server at all (as opposed to an
+        API-level refusal). zabbix_utils wraps ``URLError`` into
+        ``ProcessingError("Unable to connect to ...")``, so the message is
+        the only reliable signal for that path."""
+        if isinstance(exc, (ConnectionError, TimeoutError, ssl.SSLError, OSError)):
+            return True
+        if isinstance(exc, ProcessingError) and "unable to connect" in str(exc).lower():
+            return True
+        return False
+
+    @property
+    def config(self) -> AppConfig:
+        return self._config
+
+    def cached_versions(self) -> dict[str, str]:
+        """Versions already learned, without connecting (see ``warm_versions``)."""
+        return dict(self._versions)
+
+    def warm_versions(self) -> threading.Thread:
+        """Learn every server's version in a daemon thread so tools/list and
+        the admin pages can use it without a Zabbix round trip.
+
+        Connects *outside* ``_lock``: a server that is black-holed would
+        otherwise hold the lock for its whole request timeout and stall
+        the first call to every healthy server. A server that is down
+        is just left unknown; nothing here blocks startup or callers.
+        """
+        def _run() -> None:
+            for name in self.server_names:
+                if name in self._versions:
+                    continue
+                try:
+                    client = self._connect(name)
+                except Exception as e:  # noqa: BLE001 - startup warm-up, never fatal
+                    logger.info("Version of '%s' not known yet: %s", name, e)
+                    continue
+                with self._lock:
+                    self._clients.setdefault(name, client)
+                    self._versions.setdefault(name, str(client.api_version()))
+        t = threading.Thread(target=_run, name="zabbix-mcp-version-warmup", daemon=True)
+        t.start()
+        return t
 
     def resolve_server(self, server: str | None) -> str:
         """Resolve server name, falling back to default."""
@@ -365,7 +558,7 @@ class ClientManager:
         return obj(**params)
 
     def check_connection(self, server: str) -> dict:
-        """Verify connectivity and token auth to a Zabbix server.
+        """Verify connectivity and auth (API token or user/password) to a Zabbix server.
 
         Returns dict with 'api_ok' and 'token_ok' status.
         Raises on connection failure.

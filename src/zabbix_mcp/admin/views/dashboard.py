@@ -2,6 +2,18 @@
 # Zabbix MCP Server
 # Copyright (C) 2026 initMAX s.r.o.
 #
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
 
 """Dashboard view — overview of server status, tokens, recent activity."""
 
@@ -14,6 +26,8 @@ from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
+
+from zabbix_mcp.admin.views.servers import _normalize_url
 
 logger = logging.getLogger("zabbix_mcp.admin")
 
@@ -57,6 +71,7 @@ async def dashboard(request: Request) -> Response:
 
     # Don't check live status here — it blocks page load
     # Use cached version if available, otherwise show as "unknown"
+    skipped = client_manager.skipped_servers
     all_server_names = sorted(set(client_manager.server_names) | config_servers)
     for name in all_server_names:
         if name in client_manager.server_names:
@@ -72,11 +87,26 @@ async def dashboard(request: Request) -> Response:
                 cfg = {}
                 if name in config_servers:
                     cfg = dict(doc2.get("zabbix", {}).get(name, {}))
-                if cfg.get("url") and cfg["url"] != live_config.url:
+                # Normalised on both sides, like /servers: the raw TOML
+                # string and the loader-normalised live value differ for
+                # any URL ending in a slash (#72). `status` is not
+                # rendered today - the dots come from /api/server-status -
+                # but leaving the broken form here is how that bug comes
+                # back the moment somebody wires it up.
+                if (cfg.get("url")
+                        and _normalize_url(cfg["url"]) != _normalize_url(live_config.url)):
                     status = "changed"
             except Exception:
                 pass
             servers.append({"name": name, "status": status})
+        elif name in skipped:
+            # Section failed validation at boot and was skipped - a
+            # restart cannot load it, so do NOT present it as pending
+            # (issue #61: operator restarted in a loop). Carry the
+            # reason so the UI can say what to actually fix.
+            servers.append({
+                "name": name, "status": "error", "error": skipped[name],
+            })
         else:
             servers.append({"name": name, "status": "pending"})
 

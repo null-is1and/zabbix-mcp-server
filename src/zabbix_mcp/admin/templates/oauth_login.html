@@ -75,6 +75,9 @@
 
             <form method="post" autocomplete="on">
                 <input type="hidden" name="request_id" value="{{ request_id }}">
+                {# Zone the browser lives in (issue #75); filled by the
+                   inline script below, stays empty without JS. #}
+                <input type="hidden" name="browser_timezone" id="browser_timezone" value="">
                 <div class="form-group">
                     <label class="form-label" for="username">Username</label>
                     <input type="text" id="username" name="username" class="form-input" placeholder="Username" value="{{ username | default('') }}" required autofocus autocomplete="username">
@@ -87,6 +90,14 @@
                     <button type="submit" class="btn btn-primary w-full btn-lg">Sign in &amp; allow</button>
                 </div>
             </form>
+            <script>
+            try {
+                var zoneField = document.getElementById('browser_timezone');
+                if (zoneField && window.Intl && Intl.DateTimeFormat) {
+                    zoneField.value = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                }
+            } catch (e) { /* no zone, the server falls back */ }
+            </script>
 
             <div class="oauth-disclaimer">By signing in you grant the scopes listed above for one session.</div>
         </div>

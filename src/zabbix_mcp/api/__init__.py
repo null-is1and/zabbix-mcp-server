@@ -22,6 +22,7 @@ from zabbix_mcp.api.data_collection import DATA_COLLECTION_METHODS
 from zabbix_mcp.api.alerts import ALERTS_METHODS
 from zabbix_mcp.api.users import USERS_METHODS
 from zabbix_mcp.api.administration import ADMINISTRATION_METHODS
+from zabbix_mcp.api.observability import OBSERVABILITY_METHODS
 from zabbix_mcp.api.types import MethodDef
 
 ALL_METHODS: list[MethodDef] = [
@@ -30,4 +31,5 @@ ALL_METHODS: list[MethodDef] = [
     *ALERTS_METHODS,
     *USERS_METHODS,
     *ADMINISTRATION_METHODS,
+    *OBSERVABILITY_METHODS,
 ]

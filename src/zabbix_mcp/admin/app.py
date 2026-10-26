@@ -292,6 +292,24 @@ class _CsrfMiddleware:
         await self.app(scope, receive, send)
 
 
+# Handle to the running AdminApp, set in AdminApp.__init__. Lets code
+# outside the admin package (the OAuth client persister in server.py)
+# refresh the restart-drift baseline after a runtime config write that
+# does not actually require a restart. None when the admin portal is
+# disabled - callers treat that as a no-op.
+_LIVE_ADMIN_APP: "AdminApp | None" = None
+
+
+def refresh_config_baseline() -> None:
+    """Re-snapshot config.toml as the new 'no restart needed' baseline.
+
+    No-op when the admin portal is not running. See issue #69.
+    """
+    app = _LIVE_ADMIN_APP
+    if app is not None:
+        app._snapshot_config()
+
+
 class AdminApp:
     """Admin portal application.
 
@@ -339,17 +357,12 @@ class AdminApp:
         # do that").
         self.restart_needed = False
         self._initial_config_dump: str | None = None
-        self._config_dump_mtime: float | None = None
-        try:
-            from zabbix_mcp.admin.config_writer import (
-                load_config_document, TOMLKIT_AVAILABLE,
-            )
-            if TOMLKIT_AVAILABLE:
-                import tomlkit as _tomlkit
-                doc = load_config_document(self.config_path)
-                self._initial_config_dump = _tomlkit.dumps(doc)
-        except Exception:
-            pass
+        self._snapshot_config()
+        # Expose the live instance so runtime config writers that do NOT
+        # need a restart (OAuth dynamic client registration) can refresh
+        # the baseline instead of tripping the drift detector - issue #69.
+        global _LIVE_ADMIN_APP
+        _LIVE_ADMIN_APP = self
         self.start_time = datetime.now()
 
         # Jinja2 environment
@@ -380,32 +393,49 @@ class AdminApp:
         except Exception as exc:
             logger.debug("Update checker not started: %s", exc)
 
+    def _snapshot_config(self) -> None:
+        """Record the current config.toml as the 'nothing pending' baseline.
+
+        Called at startup, and again after a runtime write that the
+        running process has already absorbed (issue #69: dynamic OAuth
+        client registration appends an ``[oauth_clients.<id>]`` section
+        so the client survives the next boot - the provider already
+        holds it in memory, so demanding a restart is a false alarm).
+        """
+        try:
+            from zabbix_mcp.admin.config_writer import (
+                load_config_document, TOMLKIT_AVAILABLE,
+            )
+            if not TOMLKIT_AVAILABLE:
+                return
+            import tomlkit as _tomlkit
+            self._initial_config_dump = _tomlkit.dumps(
+                load_config_document(self.config_path))
+            self.restart_needed = False
+        except Exception:
+            # Never let snapshotting break startup or a registration.
+            pass
+
     def _compute_restart_needed(self) -> bool:
         """Check if the on-disk config differs from the running snapshot.
 
-        Cheap because we read mtime first and only re-parse the TOML
-        when the file actually changed since the last check. Returns
-        the bool that base.html uses to decide whether to show the
-        "Restart needed" banner. When the operator reverts a change
-        and the disk version equals the running snapshot, the banner
-        clears automatically without needing the in-memory flag - so
-        Bug 17 ("flag stays sticky after revert") goes away.
+        Compares the file's *content* on every call. An earlier version
+        short-circuited on ``st_mtime`` equality to save the parse, which
+        opened a real gap (#80): on ext4 mtime moves in scheduler ticks,
+        so an edit landing in the same tick as the snapshot - the window
+        right after a start - was never noticed, and the tests only ever
+        saw it as flakiness on Linux. config.toml is a few kilobytes;
+        reading and dumping it per page render is not worth a cache that
+        depends on filesystem timestamp granularity.
+
+        Returns the bool that base.html uses for the "Restart needed"
+        banner. When the operator reverts a change and the disk version
+        equals the running snapshot, the banner clears on its own.
         """
         if self._initial_config_dump is None:
-            # Fall back to the in-memory flag when we could not
-            # snapshot at startup (e.g. tomlkit missing).
+            # Could not snapshot at startup (e.g. tomlkit missing) - the
+            # explicit flag set by the save handlers is all we have.
             return self.restart_needed
-        try:
-            from os import stat as _stat
-            mtime = _stat(self.config_path).st_mtime
-        except Exception:
-            return self.restart_needed
-        if mtime == self._config_dump_mtime:
-            # File unchanged since last check; reuse last result by
-            # falling through to the explicit flag.
-            return self.restart_needed
-        # File changed - re-parse and compare.
-        self._config_dump_mtime = mtime
         try:
             from zabbix_mcp.admin.config_writer import load_config_document
             import tomlkit as _tomlkit
@@ -413,8 +443,6 @@ class AdminApp:
         except Exception:
             return self.restart_needed
         differs = current != self._initial_config_dump
-        # Cache the result back on the explicit flag too so subsequent
-        # renders skip the I/O until the next mtime change.
         self.restart_needed = differs
         return differs
 
@@ -641,9 +669,18 @@ class AdminApp:
                 if result.get("token_ok"):
                     results[name] = {"status": "online", "version": version}
                 else:
-                    results[name] = {"status": "token_error", "version": version, "error": "API online but token invalid or expired"}
+                    results[name] = {"status": "token_error", "version": version, "error": "API online but authentication failed (invalid token or credentials)"}
             except Exception as e:
                 results[name] = {"status": "error", "error": str(e)[:100]}
+        # Sections skipped at config load: report the validation error
+        # instead of leaving the dashboard to guess "not configured".
+        # A restart cannot load these - the config has to be fixed
+        # first (issue #61).
+        try:
+            for name, reason in self.client_manager.skipped_servers.items():
+                results[name] = {"status": "config_error", "error": reason[:300]}
+        except Exception:
+            pass
         return JSONResponse(results)
 
     async def _check_updates(self, request: Request) -> Response:

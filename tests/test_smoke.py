@@ -79,6 +79,15 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cfg.zabbix_servers["prod"].url, "http://z")
         self.assertTrue(cfg.zabbix_servers["prod"].read_only)
 
+    def test_register_write_tools_option(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
+            f.write('[server]\nregister_write_tools = false\n[zabbix.prod]\nurl = "http://z"\napi_token = "tok"\n')
+            f.flush()
+            cfg = load_config(f.name)
+        os.unlink(f.name)
+        self.assertFalse(cfg.server.register_write_tools)
+        self.assertTrue(_make_config().server.register_write_tools)
+
     def test_missing_file_raises(self):
         with self.assertRaises(ConfigError):
             load_config("/nonexistent/path.toml")
@@ -212,11 +221,11 @@ class TestAPIRegistry(unittest.TestCase):
 
 class TestToolRegistration(unittest.TestCase):
     def test_register_all_tools(self):
-        from mcp.server.fastmcp import FastMCP
+        from mcp.server.mcpserver import MCPServer
 
         cfg = _make_config()
         mgr = ClientManager(cfg)
-        mcp = FastMCP(name="test")
+        mcp = MCPServer(name="test")
         count = _register_tools(mcp, mgr)
         tools = mcp._tool_manager.list_tools()
         self.assertEqual(len(tools), count)
@@ -224,11 +233,11 @@ class TestToolRegistration(unittest.TestCase):
         self.assertGreaterEqual(count, len(ALL_METHODS) + 2)
 
     def test_key_tools_present(self):
-        from mcp.server.fastmcp import FastMCP
+        from mcp.server.mcpserver import MCPServer
 
         cfg = _make_config()
         mgr = ClientManager(cfg)
-        mcp = FastMCP(name="test")
+        mcp = MCPServer(name="test")
         _register_tools(mcp, mgr)
         names = {t.name for t in mcp._tool_manager.list_tools()}
         for expected in [
@@ -238,25 +247,112 @@ class TestToolRegistration(unittest.TestCase):
         ]:
             self.assertIn(expected, names)
 
-    def test_tools_have_descriptions(self):
-        from mcp.server.fastmcp import FastMCP
+    def test_register_write_tools_false_registers_only_read_tools(self):
+        from mcp.server.mcpserver import MCPServer
+        import zabbix_mcp.server as srv
 
         cfg = _make_config()
         mgr = ClientManager(cfg)
-        mcp = FastMCP(name="test")
+        mcp = MCPServer(name="test")
+        count = _register_tools(mcp, mgr, register_write_tools=False)
+        srv._ensure_write_tools_set()
+        names = {t.name for t in mcp._tool_manager.list_tools()}
+        self.assertEqual(len(names), count)
+        self.assertFalse(names & srv._WRITE_TOOLS, sorted(names & srv._WRITE_TOOLS))
+        self.assertTrue({m.tool_name for m in ALL_METHODS if m.read_only} <= names)
+        self.assertIn("health_check", names)
+        self.assertNotIn("host_create", names)
+        self.assertNotIn("zabbix_raw_api_call", names)
+
+    def test_tools_have_descriptions(self):
+        from mcp.server.mcpserver import MCPServer
+
+        cfg = _make_config()
+        mgr = ClientManager(cfg)
+        mcp = MCPServer(name="test")
         _register_tools(mcp, mgr)
         for tool in mcp._tool_manager.list_tools():
             self.assertTrue(tool.description, f"Tool {tool.name} has no description")
 
     def test_tools_have_parameters(self):
-        from mcp.server.fastmcp import FastMCP
+        from mcp.server.mcpserver import MCPServer
 
         cfg = _make_config()
         mgr = ClientManager(cfg)
-        mcp = FastMCP(name="test")
+        mcp = MCPServer(name="test")
         _register_tools(mcp, mgr)
         for tool in mcp._tool_manager.list_tools():
             self.assertIn("properties", tool.parameters)
+
+
+class TestRawApiCallReadOnly(unittest.TestCase):
+    def test_mediatype_test_is_refused_on_read_only_server(self):
+        """mediatype.test sends a real message; the suffix fallback must not call it a read."""
+        from unittest.mock import patch
+        from mcp.server.mcpserver import MCPServer
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        mgr = ClientManager(_make_config())  # server "test" is read_only by default
+        mcp = MCPServer(name="test")
+        _register_tools(mcp, mgr)
+        raw_call = mcp._tool_manager.get_tool("zabbix_raw_api_call").fn
+        with patch.object(mgr, "call", return_value=True) as call:
+            with self.assertRaises(ToolError) as ctx:
+                asyncio.run(raw_call(method="mediatype.test", params={"mediatypeid": "1"}))
+class TestActionConfirmRecheck(unittest.TestCase):
+    """action_confirm checks authorization itself; a prepare is not a five-minute pass."""
+
+    def _tools(self):
+        from mcp.server.mcpserver import MCPServer
+
+        cfg = AppConfig(
+            server=ServerConfig(),
+            zabbix_servers={"test": ZabbixServerConfig(
+                name="test", url="http://localhost", api_token="dummy", read_only=False,
+            )},
+        )
+        mgr = ClientManager(cfg)
+        mcp = MCPServer(name="test")
+        _register_tools(mcp, mgr)
+        tm = mcp._tool_manager
+        return cfg, mgr, tm.get_tool("action_prepare").fn, tm.get_tool("action_confirm").fn
+
+    def test_server_turned_read_only_after_prepare(self):
+        import json
+        from dataclasses import replace
+        from unittest.mock import patch
+        from mcp.server.mcpserver.exceptions import ToolError
+
+        cfg, mgr, prepare, confirm = self._tools()
+        prepared = json.loads(asyncio.run(prepare(action="host.update", params={"hostid": "1"})))
+        ro = replace(cfg.zabbix_servers["test"], read_only=True)
+        mgr._config = replace(cfg, zabbix_servers={"test": ro})
+        with patch.object(mgr, "call", return_value={"hostids": ["1"]}) as call:
+            with self.assertRaises(ToolError) as ctx:
+                asyncio.run(confirm(confirmation_token=prepared["confirmation_token"]))
+        self.assertIn("read-only", str(ctx.exception))
+        call.assert_not_called()
+
+    def test_token_turned_read_only_after_prepare(self):
+        import json
+        from unittest.mock import patch
+        from mcp.server.mcpserver.exceptions import ToolError
+        from zabbix_mcp.token_store import TokenInfo, current_token_info
+
+        cfg, mgr, prepare, confirm = self._tools()
+        rw = TokenInfo(id="ops", name="ops", token_hash="sha256:x", read_only=False)
+        ro = TokenInfo(id="ops", name="ops", token_hash="sha256:x", read_only=True)
+        outer = current_token_info.set(rw)
+        try:
+            prepared = json.loads(asyncio.run(prepare(action="host.update", params={"hostid": "1"})))
+            current_token_info.set(ro)
+            with patch.object(mgr, "call", return_value={"hostids": ["1"]}) as call:
+                with self.assertRaises(ToolError) as ctx:
+                    asyncio.run(confirm(confirmation_token=prepared["confirmation_token"]))
+        finally:
+            current_token_info.reset(outer)
+        self.assertIn("read-only", str(ctx.exception))
+        call.assert_not_called()
 
 
 class TestImportRulesNormalization(unittest.TestCase):
@@ -528,14 +624,14 @@ class TestPreprocessingNormalization(unittest.TestCase):
         self.assertEqual(result["preprocessing"][0]["error_handler"], 2)
         self.assertEqual(result["preprocessing"][0]["error_handler_params"], "0")
 
-    # --- auto-strip error_handler from DISCARD steps ---
+    # --- DISCARD steps carry the default error handler (6.x needs it present, a custom one is refused) ---
     def test_strip_error_handler_from_discard_unchanged(self):
         params = {"preprocessing": [
             {"type": 19, "params": "", "error_handler": 0, "error_handler_params": ""},
         ]}
         result = _normalize_preprocessing(params)
-        self.assertNotIn("error_handler", result["preprocessing"][0])
-        self.assertNotIn("error_handler_params", result["preprocessing"][0])
+        self.assertEqual(result["preprocessing"][0]["error_handler"], 0)
+        self.assertEqual(result["preprocessing"][0]["error_handler_params"], "")
 
     def test_strip_error_handler_from_discard_heartbeat(self):
         params = {"preprocessing": [
@@ -544,8 +640,8 @@ class TestPreprocessingNormalization(unittest.TestCase):
         ]}
         result = _normalize_preprocessing(params)
         self.assertEqual(result["preprocessing"][0]["type"], 20)
-        self.assertNotIn("error_handler", result["preprocessing"][0])
-        self.assertNotIn("error_handler_params", result["preprocessing"][0])
+        self.assertEqual(result["preprocessing"][0]["error_handler"], 0)
+        self.assertEqual(result["preprocessing"][0]["error_handler_params"], "")
 
     def test_no_strip_from_other_types(self):
         """Non-DISCARD type with error_handler → keep it."""
@@ -559,8 +655,8 @@ class TestPreprocessingNormalization(unittest.TestCase):
         """DISCARD step without error_handler → nothing to strip, no auto-fill."""
         params = {"preprocessing": [{"type": 20, "params": "3600"}]}
         result = _normalize_preprocessing(params)
-        self.assertNotIn("error_handler", result["preprocessing"][0])
-        self.assertNotIn("error_handler_params", result["preprocessing"][0])
+        self.assertEqual(result["preprocessing"][0]["error_handler"], 0)
+        self.assertEqual(result["preprocessing"][0]["error_handler_params"], "")
 
     def test_mixed_steps_auto_fill_and_strip(self):
         """Pipeline with JSONPATH + DISCARD: auto-fill on first, strip on second."""
@@ -574,8 +670,8 @@ class TestPreprocessingNormalization(unittest.TestCase):
         self.assertEqual(result["preprocessing"][0]["error_handler"], 0)
         self.assertEqual(result["preprocessing"][0]["error_handler_params"], "")
         # DISCARD: stripped
-        self.assertNotIn("error_handler", result["preprocessing"][1])
-        self.assertNotIn("error_handler_params", result["preprocessing"][1])
+        self.assertEqual(result["preprocessing"][1]["error_handler"], 0)
+        self.assertEqual(result["preprocessing"][1]["error_handler_params"], "")
 
 
 class TestSourceFile(unittest.TestCase):
@@ -1583,7 +1679,8 @@ class TestProblemActiveExtension(unittest.TestCase):
         prob = body["problems"][0]
         self.assertEqual(prob["host"], "web1")
         self.assertEqual(prob["severity_label"], "high")
-        self.assertTrue(prob["time"].endswith("UTC"))
+        # v1.38: rendered in the zone resolved for the call, ISO 8601 with offset
+        self.assertRegex(prob["time"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$")
         self.assertEqual(prob["eventid"], "9")
 
     def test_problem_active_get_default_severity_floor(self):
@@ -1714,21 +1811,34 @@ class TestOAuthProvider(unittest.IsolatedAsyncioTestCase):
             login_path="/oauth/login",
         )
 
-    async def test_register_assigns_client_id(self):
+
+    @staticmethod
+    def _client_info(**kw):
+        """Build OAuthClientInformationFull the way the SDK 2.0 DCR
+        handler does: client_id minted by the handler before the model
+        reaches provider.register_client (client_id is now a required
+        model field)."""
+        from uuid import uuid4
         from mcp.shared.auth import OAuthClientInformationFull
-        ci = OAuthClientInformationFull(
+        kw.setdefault("client_id", str(uuid4()))
+        return OAuthClientInformationFull(**kw)
+
+    async def test_register_preserves_client_id(self):
+        # SDK 2.0 contract: the handler mints client_id; register_client
+        # must keep it verbatim and index the client under it.
+        ci = self._client_info(
             redirect_uris=["http://localhost:8765/callback"],
             client_name="test-client",
             token_endpoint_auth_method="none",
         )
+        minted = ci.client_id
         await self.provider.register_client(ci)
-        self.assertTrue(ci.client_id)
+        self.assertEqual(ci.client_id, minted)
         self.assertIsNone(ci.client_secret)  # public client (PKCE)
-        self.assertIn(ci.client_id, self.provider._clients)
+        self.assertIn(minted, self.provider._clients)
 
     async def test_register_confidential_client_gets_secret(self):
-        from mcp.shared.auth import OAuthClientInformationFull
-        ci = OAuthClientInformationFull(
+        ci = self._client_info(
             redirect_uris=["https://app.example.com/cb"],
             client_name="confidential",
             token_endpoint_auth_method="client_secret_post",
@@ -1737,9 +1847,8 @@ class TestOAuthProvider(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(ci.client_secret)
 
     async def test_authorize_redirects_to_login(self):
-        from mcp.shared.auth import OAuthClientInformationFull
         from mcp.server.auth.provider import AuthorizationParams
-        ci = OAuthClientInformationFull(
+        ci = self._client_info(
             redirect_uris=["http://localhost:8765/cb"],
             client_name="x",
             token_endpoint_auth_method="none",
@@ -1761,9 +1870,8 @@ class TestOAuthProvider(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(pending)
 
     async def test_complete_pending_mints_code_redirect(self):
-        from mcp.shared.auth import OAuthClientInformationFull
         from mcp.server.auth.provider import AuthorizationParams
-        ci = OAuthClientInformationFull(
+        ci = self._client_info(
             redirect_uris=["http://localhost:8765/cb"],
             client_name="x",
             token_endpoint_auth_method="none",
@@ -1784,6 +1892,9 @@ class TestOAuthProvider(unittest.IsolatedAsyncioTestCase):
         self.assertIn("http://localhost:8765/cb?", redirect)
         self.assertIn("state=state-xyz", redirect)
         self.assertIn("code=", redirect)
+        # RFC 9207: the authorization response must identify the issuer
+        # so the client can detect an AS mix-up before redeeming.
+        self.assertIn("iss=https%3A%2F%2Fmcp.example.com", redirect)
 
     async def test_audience_binding_rejects_other_deployment(self):
         # An access token issued for a different MCP server URL must not
@@ -1848,8 +1959,8 @@ class TestSecurityPathTraversal(unittest.TestCase):
             _resolve_source_file(params, allowed_import_dirs=["/opt/zabbix-mcp/imports"])
         self.assertIn("allowed import directory", str(ctx.exception))
 
-    def test_symlink_rejected(self):
-        """Symlink pointing to a valid file inside allowed dir is still rejected."""
+    def test_symlink_inside_allowed_dir_is_accepted(self):
+        """Symlink is judged by its resolved target: inside the allowed dir, it is read."""
         import tempfile
         tmpdir = tempfile.mkdtemp()
         target = os.path.join(tmpdir, "template.yaml")
@@ -1859,16 +1970,16 @@ class TestSecurityPathTraversal(unittest.TestCase):
                 f.write("zabbix_export:\n  version: '7.0'\n")
             os.symlink(target, link)
             params = {"source_file": link}
-            with self.assertRaises(ValueError) as ctx:
-                _resolve_source_file(params, allowed_import_dirs=[tmpdir])
-            self.assertIn("symbolic link", str(ctx.exception))
+            result = _resolve_source_file(params, allowed_import_dirs=[tmpdir])
+            self.assertIn("zabbix_export", result["source"])
+            self.assertNotIn("source_file", result)
         finally:
             os.unlink(link)
             os.unlink(target)
             os.rmdir(tmpdir)
 
     def test_symlink_escaping_allowed_dir(self):
-        """Symlink pointing outside allowed dir is rejected."""
+        """Symlink pointing outside allowed dir is rejected by the containment check."""
         import tempfile
         tmpdir = tempfile.mkdtemp()
         link = os.path.join(tmpdir, "escape.yaml")
@@ -1877,7 +1988,7 @@ class TestSecurityPathTraversal(unittest.TestCase):
             params = {"source_file": link}
             with self.assertRaises(ValueError) as ctx:
                 _resolve_source_file(params, allowed_import_dirs=[tmpdir])
-            self.assertIn("symbolic link", str(ctx.exception))
+            self.assertIn("allowed import directory", str(ctx.exception))
         finally:
             os.unlink(link)
             os.rmdir(tmpdir)
