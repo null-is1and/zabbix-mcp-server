@@ -19,7 +19,7 @@
 
 These functions are standalone — each receives a ClientManager instance and
 server name, performs its work via Zabbix API calls, and returns a JSON string.
-They are registered as MCP tools directly via FastMCP decorators in server.py.
+They are registered as MCP tools directly via MCPServer decorators in server.py.
 """
 
 from __future__ import annotations
@@ -35,6 +35,8 @@ import http.cookiejar
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from zabbix_mcp.timezones import resolve_zone
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -842,9 +844,13 @@ def _filter_active_problems(
     return kept, host_by_trigger
 
 
-def _ts_to_human(ts: Any) -> str:
-    """Render a Zabbix Unix timestamp as 'YYYY-MM-DD HH:MM UTC'."""
+def _ts_to_human(ts: Any, tz: Any = None) -> str:
+    """Render a Zabbix Unix timestamp for a reader: in *tz* as
+    ``YYYY-MM-DDTHH:MM:SS+HH:MM`` when a zone is given (issue #75), else
+    the legacy ``YYYY-MM-DD HH:MM UTC``."""
     try:
+        if tz is not None:
+            return datetime.fromtimestamp(int(ts), tz).isoformat(timespec="seconds")
         return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     except (ValueError, TypeError, OSError):
         return ""
@@ -864,7 +870,8 @@ def problem_active_get(
     3. Default ``severities = [2, 3, 4, 5]`` - Warning and above only.
 
     Returns each problem augmented with ``host``, ``hostid``, ``time`` (human
-    readable UTC), and ``severity_label``.
+    readable, in the zone resolved for the call - see ``timezones``), and
+    ``severity_label``.
 
     Args:
         client_manager: ClientManager instance.
@@ -910,6 +917,7 @@ def problem_active_get(
         kept, host_map = _filter_active_problems(problems, client_manager, server_name)
 
         enriched = []
+        zone = resolve_zone(client_manager, server_name)
         for p in kept[:limit]:
             tid = str(p.get("objectid", ""))
             sev = str(p.get("severity", "0"))
@@ -923,7 +931,7 @@ def problem_active_get(
                 "severity": sev,
                 "severity_label": _SEVERITY_LABELS.get(sev, sev),
                 "clock": p.get("clock", ""),
-                "time": _ts_to_human(p.get("clock")),
+                "time": _ts_to_human(p.get("clock"), zone),
                 "acknowledged": int(p.get("acknowledged", 0) or 0),
             })
 
@@ -1023,6 +1031,7 @@ def host_status_get(
         kept_problems, host_map = _filter_active_problems(problems_raw, client_manager, server_name)
         active_problems: list[dict[str, Any]] = []
         sev_count = {"warning": 0, "average": 0, "high": 0, "disaster": 0}
+        zone = resolve_zone(client_manager, server_name)
         for p in kept_problems[:25]:
             sev = str(p.get("severity", "0"))
             label = _SEVERITY_LABELS.get(sev, sev)
@@ -1034,7 +1043,7 @@ def host_status_get(
                 "name": p.get("name", ""),
                 "severity": sev,
                 "severity_label": label,
-                "time": _ts_to_human(p.get("clock")),
+                "time": _ts_to_human(p.get("clock"), zone),
                 "acknowledged": int(p.get("acknowledged", 0) or 0),
             })
 
@@ -1060,7 +1069,7 @@ def host_status_get(
                 "key": it.get("key_", ""),
                 "lastvalue": it.get("lastvalue", ""),
                 "units": it.get("units", ""),
-                "lastclock_human": _ts_to_human(it.get("lastclock")),
+                "lastclock_human": _ts_to_human(it.get("lastclock"), zone),
             })
 
         return json.dumps({
@@ -1204,25 +1213,23 @@ def infrastructure_summary_get(
     """
     try:
         top_n = int(kwargs.get("top_n", 5))
-        # Counts via output="count" - one cheap query each.
-        def _count(method: str) -> int:
+        # Counts via countOutput=true - one cheap query each. Zabbix
+        # returns the count as a string ("1753"). Note: output="count"
+        # is NOT a valid API value - Zabbix silently ignores it and
+        # returns a list of ids, which is why issue #54 saw zeros.
+        def _count(method: str, extra: dict | None = None) -> int:
             try:
-                v = client_manager.call(server_name, method, {"output": "count"})
+                params: dict[str, Any] = {"countOutput": True}
+                if extra:
+                    params.update(extra)
+                v = client_manager.call(server_name, method, params)
                 return int(v) if isinstance(v, (int, str)) else 0
             except Exception:
                 return 0
 
         host_count = _count("host.get")
         # Enabled hosts only - status=0 in Zabbix means monitored.
-        # countOutput is faster than fetching the hostid list and len().
-        try:
-            v = client_manager.call(server_name, "host.get", {
-                "output": "count",
-                "filter": {"status": 0},
-            })
-            host_enabled = int(v) if isinstance(v, (int, str)) else 0
-        except Exception:
-            host_enabled = 0
+        host_enabled = _count("host.get", {"filter": {"status": 0}})
         item_count = _count("item.get")
         trigger_count = _count("trigger.get")
         template_count = _count("template.get")

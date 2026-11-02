@@ -1,0 +1,2917 @@
+{
+ "methods": {
+  "user.get": {
+   "object": "user",
+   "sortfield": [
+    "userid",
+    "username"
+   ],
+   "common": [
+    "filter",
+    "output",
+    "search",
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "limit",
+    "preservekeys",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "mediaids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "mediatypeids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "usrgrpids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "getAccess": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectMedias": {
+     "type": "query",
+     "since": null
+    },
+    "selectMediatypes": {
+     "type": "query",
+     "since": null
+    },
+    "selectUsrgrps": {
+     "type": "query",
+     "since": null
+    },
+    "selectRole": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield possible values on 5.0 page: userid, alias; from 6.0 on: userid, username",
+    "filter/search are not restricted for Super admin; for Admin and User type users requesting data on users in their user group the 7.4 page limits filter to userid, name, surname, username and search to name, surname, username",
+    "output for Admin/User type users is limited (see 7.4 page); selectRole appears from 6.0 page (roles introduced in 5.2, 5.2 page not fetched for user)",
+    "filter is listed before output on 7.4 page; common list keeps the page order"
+   ]
+  },
+  "usergroup.get": {
+   "object": "usergroup",
+   "sortfield": [
+    "usrgrpid",
+    "name"
+   ],
+   "common": [
+    "output",
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "status": {
+     "type": "integer",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "usrgrpids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "limitSelects": {
+     "type": "integer",
+     "since": null
+    },
+    "mfaids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "mfa_status": {
+     "type": "integer",
+     "since": "7.0"
+    },
+    "proxyids": {
+     "type": "ID/array",
+     "since": "8.0"
+    },
+    "proxy_groupids": {
+     "type": "ID/array",
+     "since": "8.0"
+    }
+   },
+   "selects": {
+    "selectTagFilters": {
+     "type": "query",
+     "since": null
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": null
+    },
+    "selectRights": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHostGroupRights": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectTemplateGroupRights": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectProxies": {
+     "type": "ID/array",
+     "since": "8.0"
+    },
+    "selectProxyGroups": {
+     "type": "ID/array",
+     "since": "8.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "parameter selectRights marked (deprecated) on pages ['6.2', '6.4', '7.0']",
+    "selectRights deprecated on 6.2-7.0 pages, no longer listed on 7.2 page",
+    "selectProxies and selectProxyGroups are documented with type ID/array (not query) on the 8.0 page; both marked supported for Super admin type users only",
+    "limitSelects is a method-specific parameter here (not in the reference-commentary common set), so it is recorded in params"
+   ]
+  },
+  "userdirectory.get": {
+   "object": "userdirectory",
+   "sortfield": [
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "filter",
+    "search",
+    "countOutput",
+    "excludeSearch",
+    "limit",
+    "output",
+    "preservekeys",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "userdirectoryids": {
+     "type": "ID/array",
+     "since": "6.2"
+    }
+   },
+   "selects": {
+    "selectUsrgrps": {
+     "type": "query",
+     "since": "6.2"
+    },
+    "selectProvisionMedia": {
+     "type": "query",
+     "since": "6.4"
+    },
+    "selectProvisionGroups": {
+     "type": "query",
+     "since": "6.4"
+    }
+   },
+   "filter_props": [
+    "userdirectoryid",
+    "idp_type",
+    "provision_status"
+   ],
+   "search_props": [
+    "name",
+    "description"
+   ],
+   "notes": [
+    "documentation pages for userdirectory do not exist before 6.2 (checked ['5.0', '5.2', '5.4', '6.0'] where fetched); everything present on the 6.2 page is marked since 6.2",
+    "sortfield possible values on 6.2 page: name, host; from 6.4 on: name",
+    "filter/search restrictions taken from 7.4 page; 8.0 page lists the same"
+   ]
+  },
+  "role.get": {
+   "object": "role",
+   "sortfield": [
+    "roleid",
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "roleids": {
+     "type": "ID/array",
+     "since": "5.2"
+    },
+    "current": {
+     "type": "boolean",
+     "since": "8.0"
+    }
+   },
+   "selects": {
+    "selectRules": {
+     "type": "query",
+     "since": "5.2"
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": "5.2"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for role do not exist before 5.2 (checked ['5.0'] where fetched); everything present on the 5.2 page is marked since 5.2",
+    "parameter current (boolean) first listed on the 8.0 page"
+   ]
+  },
+  "token.get": {
+   "object": "token",
+   "sortfield": [
+    "tokenid",
+    "name",
+    "lastaccess",
+    "status",
+    "expires_at",
+    "created_at"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "tokenids": {
+     "type": "ID/array",
+     "since": "5.4"
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": "5.4"
+    },
+    "token": {
+     "type": "string",
+     "since": "5.4"
+    },
+    "valid_at": {
+     "type": "timestamp",
+     "since": "5.4"
+    },
+    "expired_at": {
+     "type": "timestamp",
+     "since": "5.4"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for token do not exist before 5.4 (checked ['5.0', '5.2'] where fetched); everything present on the 5.4 page is marked since 5.4",
+    "token.get does not list editable",
+    "sortfield possible values identical on all pages 5.4-8.0"
+   ]
+  },
+  "authentication.get": {
+   "object": "authentication",
+   "sortfield": [],
+   "common": [
+    "output"
+   ],
+   "params": {},
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for authentication do not exist before 5.2 (checked ['5.0'] where fetched); everything present on the 5.2 page is marked since 5.2",
+    "singleton method: only output is listed in the parameter table; no filter/search/sortfield"
+   ]
+  },
+  "autoregistration.get": {
+   "object": "autoregistration",
+   "sortfield": [],
+   "common": [
+    "output"
+   ],
+   "params": {},
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "singleton method: only output is listed in the parameter table; no filter/search/sortfield",
+    "autoregistration pages exist on 5.0; all properties/parameters present since 5.0"
+   ]
+  },
+  "iconmap.get": {
+   "object": "iconmap",
+   "sortfield": [
+    "iconmapid",
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "iconmapids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "sysmapids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectMappings": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": []
+  },
+  "image.get": {
+   "object": "image",
+   "sortfield": [
+    "imageid",
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "imageids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "sysmapids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "select_image": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "select_image is a flag (not a query select); it adds the Base64 image property; kept under selects because of its name"
+   ]
+  },
+  "settings.get": {
+   "object": "settings",
+   "sortfield": [],
+   "common": [
+    "output"
+   ],
+   "params": {},
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for settings do not exist before 5.2 (checked ['5.0'] where fetched); everything present on the 5.2 page is marked since 5.2",
+    "singleton method: only output is listed in the parameter table; no filter/search/sortfield"
+   ]
+  },
+  "regexp.get": {
+   "object": "regexp",
+   "sortfield": [
+    "regexpid",
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "regexpids": {
+     "type": "ID/array",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectExpressions": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for regexp do not exist before 6.0 (checked ['5.0', '5.2', '5.4'] where fetched); everything present on the 6.0 page is marked since 6.0"
+   ]
+  },
+  "module.get": {
+   "object": "module",
+   "sortfield": [
+    "moduleid",
+    "relative_path"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "moduleids": {
+     "type": "ID/array",
+     "since": "6.4"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for module do not exist before 6.4 (checked ['5.0', '5.2', '5.4', '6.0', '6.2'] where fetched); everything present on the 6.4 page is marked since 6.4",
+    "module.get does not list editable"
+   ]
+  },
+  "connector.get": {
+   "object": "connector",
+   "sortfield": [
+    "connectorid",
+    "name",
+    "data_type",
+    "status"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "connectorids": {
+     "type": "ID/array",
+     "since": "6.4"
+    }
+   },
+   "selects": {
+    "selectTags": {
+     "type": "query",
+     "since": "6.4"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for connector do not exist before 6.4 (checked ['5.0', '5.2', '5.4', '6.0', '6.2'] where fetched); everything present on the 6.4 page is marked since 6.4",
+    "connector.get does not list editable"
+   ]
+  },
+  "auditlog.get": {
+   "object": "auditlog",
+   "sortfield": [
+    "auditid",
+    "userid",
+    "clock"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "auditids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectDetails": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "selectDetails (Audit log details sub-object) listed only on the 5.0 page; from 6.0 details is a text property of the audit log object",
+    "auditlog.get does not list editable"
+   ]
+  },
+  "housekeeping.get": {
+   "object": "housekeeping",
+   "sortfield": [],
+   "common": [
+    "output"
+   ],
+   "params": {},
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for housekeeping do not exist before 5.2 (checked ['5.0'] where fetched); everything present on the 5.2 page is marked since 5.2",
+    "singleton method: only output is listed in the parameter table; no filter/search/sortfield"
+   ]
+  },
+  "proxy.get": {
+   "object": "proxy",
+   "sortfield": [
+    "proxyid",
+    "name",
+    "operating_mode"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "proxyids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "proxy_groupids": {
+     "type": "ID/array",
+     "since": "7.0"
+    }
+   },
+   "selects": {
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectInterface": {
+     "type": "query",
+     "since": null,
+     "removed": "7.0"
+    },
+    "selectAssignedHosts": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectProxyGroup": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectApm": {
+     "type": "query",
+     "since": "8.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield possible values on 5.0-6.4 pages: hostid, host, status; from 7.0 on: proxyid, name, operating_mode",
+    "proxy API reworked in 7.0: selectInterface removed, proxy_groupids/selectAssignedHosts/selectProxyGroup added; selectApm added on 8.0 page",
+    "sortfield: hostid, host, status up to 6.4 (6.4.21 verified live); proxyid, name, operating_mode from 7.0"
+   ],
+   "sortfield_versions": {
+    "proxyid": {
+     "since": "7.0"
+    },
+    "name": {
+     "since": "7.0"
+    },
+    "operating_mode": {
+     "since": "7.0"
+    },
+    "hostid": {
+     "removed": "7.0"
+    },
+    "host": {
+     "removed": "7.0"
+    },
+    "status": {
+     "removed": "7.0"
+    }
+   }
+  },
+  "proxygroup.get": {
+   "object": "proxygroup",
+   "sortfield": [
+    "proxy_groupid",
+    "name"
+   ],
+   "common": [
+    "sortfield",
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "proxy_groupids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "proxyids": {
+     "type": "ID/array",
+     "since": "7.0"
+    }
+   },
+   "selects": {
+    "selectProxies": {
+     "type": "query",
+     "since": "7.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "documentation pages for proxygroup do not exist before 7.0 (checked ['5.0', '5.2', '5.4', '6.0', '6.2', '6.4'] where fetched); everything present on the 7.0 page is marked since 7.0"
+   ]
+  },
+  "mfa.get": {
+   "object": "mfa",
+   "sortfield": [
+    "name"
+   ],
+   "common": [
+    "filter",
+    "sortfield",
+    "search",
+    "countOutput",
+    "excludeSearch",
+    "limit",
+    "output",
+    "preservekeys",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "mfaids": {
+     "type": "ID/array",
+     "since": "7.0"
+    }
+   },
+   "selects": {
+    "selectUsrgrps": {
+     "type": "query",
+     "since": "7.0"
+    }
+   },
+   "filter_props": [
+    "mfaid",
+    "type"
+   ],
+   "search_props": [
+    "name"
+   ],
+   "notes": [
+    "documentation pages for mfa do not exist before 7.0 (checked ['5.0', '5.2', '5.4', '6.0', '6.2', '6.4'] where fetched); everything present on the 7.0 page is marked since 7.0",
+    "filter/search restrictions taken from 7.4 page; 8.0 page lists the same",
+    "mfa.get does not list editable"
+   ]
+  }
+ },
+ "objects": {
+  "user": {
+   "props": {
+    "userid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "alias": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "6.4"
+    },
+    "attempt_clock": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "attempt_failed": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "attempt_ip": {
+     "type": "string",
+     "readonly": true,
+     "since": null
+    },
+    "autologin": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "autologout": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "lang": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "refresh": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "rows_per_page": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "surname": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "theme": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null,
+     "removed": "6.0"
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "roleid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "timezone": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "passwd": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "ts_provisioned": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "userdirectoryid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "provisioned": {
+     "type": "integer",
+     "readonly": true,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "property alias marked (required) on pages ['5.0', '6.0', '6.2']",
+    "property username marked (required) on pages ['6.0', '6.2']",
+    "property roleid marked (required) on pages ['6.0', '6.2']",
+    "property username: doc marks it read-only only conditionally (e.g. for provisioned users); readonly recorded as false",
+    "type property (user type) listed on 5.0 page only; user types moved to roles (roleid) in 5.2, first fetched page without it is 6.0",
+    "alias listed on 5.0 page, marked deprecated on 6.0/6.2 pages, no longer listed on 6.4 page; username replaces it from 6.0 page",
+    "passwd documented as write-only"
+   ]
+  },
+  "usergroup": {
+   "props": {
+    "usrgrpid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "debug_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "gui_access": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "users_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "userdirectoryid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "mfa_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "mfaid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "proxy_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "proxy_group_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['5.0', '6.0', '6.2']",
+    "proxy_mode and proxy_group_mode first listed on the 8.0 page"
+   ]
+  },
+  "userdirectory": {
+   "props": {
+    "userdirectoryid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.2"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "host": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "port": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "base_dn": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "search_attribute": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "bind_dn": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "bind_password": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "search_filter": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "start_tls": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "idp_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "group_name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "user_username": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "user_lastname": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "provision_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "provision_groups": {
+     "type": "array",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "provision_media": {
+     "type": "array",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "group_basedn": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "group_filter": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "group_member": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "group_membership": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "user_ref_attr": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "idp_entityid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sp_entityid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "username_attribute": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sso_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "slo_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "encrypt_nameid": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "encrypt_assertions": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "nameid_format": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "scim_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sign_assertions": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sign_authn_requests": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sign_messages": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sign_logout_requests": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "sign_logout_responses": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "idp_certificate": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "sp_private_key": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "sp_certificate": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "idp_certificate_hash": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "sp_private_key_hash": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "sp_certificate_hash": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['6.2']",
+    "property host marked (required) on pages ['6.2']",
+    "property port marked (required) on pages ['6.2']",
+    "property base_dn marked (required) on pages ['6.2']",
+    "property search_attribute marked (required) on pages ['6.2']",
+    "section header rows in property table: ['LDAP-specific properties:', 'SAML-specific properties:']",
+    "object page does not exist before 6.2; properties present on 6.2 page are marked since 6.2",
+    "6.2 page documents an LDAP-only user directory (name, host, port, base_dn, search_attribute, bind_dn, bind_password, description, search_filter, start_tls); 6.4 reworked it into generic + LDAP-specific + SAML-specific properties (section header rows LDAP-specific properties: / SAML-specific properties: are not properties and were dropped)",
+    "idp_certificate, sp_private_key, sp_certificate and their *_hash read-only variants first listed on the 8.0 page"
+   ]
+  },
+  "role": {
+   "props": {
+    "roleid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "5.2"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "readonly": {
+     "type": "integer",
+     "readonly": true,
+     "since": "5.2"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['5.2', '5.4', '6.0', '6.2']",
+    "property type marked (required) on pages ['5.2', '5.4', '6.0', '6.2']",
+    "object page does not exist before 5.2; properties present on 5.2 page are marked since 5.2",
+    "readonly property (integer) is itself marked read-only"
+   ]
+  },
+  "token": {
+   "props": {
+    "tokenid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "5.4"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "lastaccess": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "5.4"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "expires_at": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "created_at": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "5.4"
+    },
+    "creator_userid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "5.4"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['5.4', '6.0', '6.2']",
+    "object page does not exist before 5.4; properties present on 5.4 page are marked since 5.4",
+    "token value is not an object property (returned only by token.generate)"
+   ]
+  },
+  "authentication": {
+   "props": {
+    "authentication_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "http_auth_enabled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "http_login_form": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "http_strip_domains": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "http_case_sensitive": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ldap_configured": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "ldap_host": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "ldap_port": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "ldap_base_dn": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "ldap_search_attribute": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "ldap_bind_dn": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "ldap_case_sensitive": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ldap_bind_password": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.2"
+    },
+    "saml_auth_enabled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "saml_idp_entityid": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sso_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_slo_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_username_attribute": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sp_entityid": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_nameid_format": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sign_messages": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sign_assertions": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sign_authn_requests": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sign_logout_requests": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_sign_logout_responses": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_encrypt_nameid": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_encrypt_assertions": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "6.4"
+    },
+    "saml_case_sensitive": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "passwd_min_length": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "passwd_check_rules": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "ldap_userdirectoryid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "ldap_auth_enabled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "ldap_jit_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "saml_jit_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "jit_provision_interval": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "disabled_usrgrpid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "mfa_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "mfaid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "object page does not exist before 5.2; properties present on 5.2 page are marked since 5.2",
+    "LDAP server settings (ldap_host, ldap_port, ldap_base_dn, ldap_search_attribute, ldap_bind_dn, ldap_bind_password) moved to the userdirectory object: not listed from 6.2 page on; ldap_configured and the saml_* IdP settings not listed from 6.4 page on (replaced by ldap_auth_enabled and userdirectory SAML properties)"
+   ]
+  },
+  "autoregistration": {
+   "props": {
+    "tls_accept": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk_identity": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": []
+  },
+  "iconmap": {
+   "props": {
+    "iconmapid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "default_iconid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "property default_iconid marked (required) on pages ['5.0', '6.0', '6.2']",
+    "property name marked (required) on pages ['5.0', '6.0', '6.2']"
+   ]
+  },
+  "image": {
+   "props": {
+    "imageid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "imagetype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "image": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['5.0', '6.0', '6.2']",
+    "image property (Base64) first listed in the property table on the 6.4 page; on 5.0-6.2 pages it is only returned via select_image"
+   ]
+  },
+  "settings": {
+   "props": {
+    "default_lang": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "default_timezone": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "default_theme": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "search_limit": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "max_overview_table_size": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "max_in_table": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "server_check_interval": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "work_period": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "show_technical_errors": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "history_period": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "period_default": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "max_period": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_0": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_1": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_2": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_3": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_4": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_color_5": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_0": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_1": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_2": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_3": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_4": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "severity_name_5": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "custom_color": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ok_period": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "blink_period": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "problem_unack_color": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "problem_ack_color": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ok_unack_color": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ok_ack_color": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "problem_unack_style": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "problem_ack_style": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ok_unack_style": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "ok_ack_style": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "discovery_groupid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "default_inventory_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "alert_usrgrpid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "snmptrap_logging": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "login_attempts": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "login_block": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "validate_uri_schemes": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "uri_valid_schemes": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "x_frame_options": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "iframe_sandboxing_enabled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "iframe_sandboxing_exceptions": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "connect_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "socket_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "media_type_test_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "item_test_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "script_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "session_key": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2",
+     "removed": "5.4"
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "report_test_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.4"
+    },
+    "auditlog_enabled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "ha_failover_delay": {
+     "type": "string",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "geomaps_tile_provider": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "geomaps_tile_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "geomaps_max_zoom": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "geomaps_attribution": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "vault_provider": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.2"
+    },
+    "auditlog_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_zabbix_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_simple_check": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_snmp_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_external_check": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_db_monitor": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_http_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_ssh_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_telnet_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_script": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_browser": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "proxy_secrets_provider": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "device_link_timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "timeout_telemetry_query": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    },
+    "apm_global_db": {
+     "type": "object",
+     "readonly": false,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "rows sharing type/description via rowspan with the previous row (inherited): ['timeout_browser', 'timeout_db_monitor', 'timeout_external_check', 'timeout_http_agent', 'timeout_script', 'timeout_simple_check', 'timeout_snmp_agent', 'timeout_ssh_agent', 'timeout_telemetry_query', 'timeout_telnet_agent']",
+    "object page does not exist before 5.2; properties present on 5.2 page are marked since 5.2",
+    "timeout_* rows share one type/description cell via rowspan on 7.0+ pages (type string); timeout_telemetry_query first listed on 8.0 page",
+    "session_key listed on 5.2 page only; url and report_test_timeout first listed on 5.4 page",
+    "proxy_secrets_provider first listed on 7.4 page; device_link_timeout and apm_global_db first listed on 8.0 page"
+   ]
+  },
+  "regexp": {
+   "props": {
+    "regexpid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "test_string": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "property name marked (required) on pages ['6.0', '6.2']",
+    "object page does not exist before 6.0; properties present on 6.0 page are marked since 6.0",
+    "description property first listed on the 8.0 page"
+   ]
+  },
+  "module": {
+   "props": {
+    "moduleid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "id": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "relative_path": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "config": {
+     "type": "object",
+     "readonly": false,
+     "since": "6.4"
+    }
+   },
+   "notes": [
+    "object page does not exist before 6.4; properties present on 6.4 page are marked since 6.4"
+   ]
+  },
+  "connector": {
+   "props": {
+    "connectorid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "protocol": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "data_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "max_records": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "max_senders": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "max_attempts": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "http_proxy": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "authtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "password": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "token": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "verify_peer": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "verify_host": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "ssl_cert_file": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "ssl_key_file": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "ssl_key_password": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "tags_evaltype": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "item_value_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "attempt_interval": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "object page does not exist before 6.4; properties present on 6.4 page are marked since 6.4",
+    "item_value_type and attempt_interval first listed on the 7.0 page"
+   ]
+  },
+  "auditlog": {
+   "props": {
+    "auditid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "action": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "resourcetype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "note": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "6.0"
+    },
+    "ip": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "resourceid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "resourcename": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "recordsetid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "details": {
+     "type": "text",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "resource_cuid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "audit log pages do not mark any property read-only (object has no create/update methods); readonly recorded false for all",
+    "note property listed on 5.0 page only; username, recordsetid, details first listed on 6.0 page; resource_cuid first listed on 7.0 page",
+    "5.0 page also documents an Audit log details sub-object (table_name, field_name, oldvalue, newvalue) returned via selectDetails; not a top-level property, not recorded"
+   ]
+  },
+  "housekeeping": {
+   "props": {
+    "hk_events_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_events_trigger": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_events_internal": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_events_discovery": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_events_autoreg": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_services_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_services": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_audit_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_audit": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_sessions_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_sessions": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_history_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_history_global": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_history": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_trends_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_trends_global": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "hk_trends": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "db_extension": {
+     "type": "string",
+     "readonly": true,
+     "since": "5.2"
+    },
+    "compression_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "compress_older": {
+     "type": "string",
+     "readonly": false,
+     "since": "5.2"
+    },
+    "compression_availability": {
+     "type": "integer",
+     "readonly": true,
+     "since": "5.2"
+    },
+    "hk_events_service": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "object page does not exist before 5.2; properties present on 5.2 page are marked since 5.2",
+    "hk_events_service first listed on 6.0 page"
+   ]
+  },
+  "proxy": {
+   "props": {
+    "proxyid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "host": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "7.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null,
+     "removed": "7.0"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "lastaccess": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "tls_connect": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_accept": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "tls_issuer": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_subject": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk_identity": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "tls_psk": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "proxy_address": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "7.0"
+    },
+    "auto_compress": {
+     "type": "integer",
+     "readonly": true,
+     "since": null,
+     "removed": "7.0"
+    },
+    "version": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "compatibility": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.4"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "proxy_groupid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "local_address": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "local_port": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "operating_mode": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "address": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "port": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "allowed_addresses": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "custom_timeouts": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_zabbix_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_simple_check": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_snmp_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_external_check": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_db_monitor": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_http_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_ssh_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_telnet_agent": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_script": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "timeout_browser": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "state": {
+     "type": "integer",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "timeout_telemetry_query": {
+     "type": "string",
+     "readonly": false,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "property host marked (required) on pages ['5.0', '6.0', '6.2']",
+    "property status marked (required) on pages ['5.0', '6.0', '6.2']",
+    "rows sharing type/description via rowspan with the previous row (inherited): ['timeout_browser', 'timeout_db_monitor', 'timeout_external_check', 'timeout_http_agent', 'timeout_script', 'timeout_simple_check', 'timeout_snmp_agent', 'timeout_ssh_agent', 'timeout_telemetry_query', 'timeout_telnet_agent']",
+    "proxy object reworked on the 7.0 page: host, status, proxy_address, auto_compress no longer listed (removed 7.0); name, proxy_groupid, local_address, local_port, operating_mode, address, port, allowed_addresses, custom_timeouts, timeout_*, state added; version/compatibility first listed on 6.4 page",
+    "timeout_* rows share one type/description cell via rowspan (type string); timeout_telemetry_query first listed on 8.0 page",
+    "before 7.0 the proxy ID property was proxyid but sortfield used hostid/host/status (host object heritage)"
+   ]
+  },
+  "proxygroup": {
+   "props": {
+    "proxy_groupid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "failover_delay": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "min_online": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "state": {
+     "type": "integer",
+     "readonly": true,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "object page does not exist before 7.0; properties present on 7.0 page are marked since 7.0"
+   ]
+  },
+  "mfa": {
+   "props": {
+    "mfaid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "hash_function": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "code_length": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "api_hostname": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "clientid": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "client_secret": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "object page does not exist before 7.0; properties present on 7.0 page are marked since 7.0"
+   ]
+  }
+ },
+ "sources": [
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/5.2/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/5.4/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/connector/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/connector/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/module/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/module/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/connector/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/connector/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/mfa/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/mfa/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/module/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/module/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/proxygroup/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/proxygroup/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/connector/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/connector/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/mfa/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/mfa/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/module/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/module/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/proxygroup/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/proxygroup/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/connector/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/connector/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/mfa/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/mfa/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/module/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/module/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/proxygroup/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/proxygroup/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/usergroup/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/auditlog/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/auditlog/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/authentication/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/authentication/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/autoregistration/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/autoregistration/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/connector/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/connector/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/housekeeping/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/housekeeping/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/iconmap/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/iconmap/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/image/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/image/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/mfa/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/mfa/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/module/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/module/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/proxy/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/proxy/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/proxygroup/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/proxygroup/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/regexp/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/regexp/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/role/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/role/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/settings/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/settings/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/token/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/token/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/user/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/user/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/userdirectory/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/userdirectory/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/usergroup/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/usergroup/object"
+ ],
+ "notes_global": [
+  "since values 5.2/5.4 come from the 5.2/5.4 documentation pages fetched for objects absent in 5.0; \"removed\" = first fetched release whose page no longer lists the item",
+  "pages checked and absent (404 / \"This topic does not exist yet\"): authentication 5.0; housekeeping 5.0; settings 5.0; role 5.0; token 5.0, 5.2; regexp 5.0-5.4; userdirectory 5.0-6.0; module 5.0-6.2; connector 5.0-6.2; proxygroup 5.0-6.4; mfa 5.0-6.4"
+ ]
+}

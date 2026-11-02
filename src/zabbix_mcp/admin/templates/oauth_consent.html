@@ -110,6 +110,10 @@
             <form method="post" action="/oauth/login" autocomplete="off">
                 <input type="hidden" name="request_id" value="{{ request_id }}">
                 <input type="hidden" name="step" value="consent">
+                {# Zone the browser lives in (issue #75); filled by the
+                   inline script below, stays empty without JS. Used for
+                   the issued tokens unless the portal user has a zone. #}
+                <input type="hidden" name="browser_timezone" id="browser_timezone" value="">
 
                 {% for scope in scopes %}
                 <label class="consent-scope-row{% if scope.id == '*' %} wildcard{% endif %}{% if scope.disabled %} disabled{% endif %}{% if scope.id != '*' %} narrow-scope{% endif %}">
@@ -146,6 +150,16 @@
     </div>
 
     <script>
+    // Report the browser's zone so the tokens this consent issues can
+    // render local times for the operator (issue #75). Best effort: an
+    // old engine without Intl leaves the field empty.
+    try {
+        var zoneField = document.getElementById('browser_timezone');
+        if (zoneField && window.Intl && Intl.DateTimeFormat) {
+            zoneField.value = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        }
+    } catch (e) { /* no zone, the server falls back */ }
+
     // Wildcard `*` and the six concrete groups are mutually exclusive.
     // When * is ticked, the concrete groups are dimmed + disabled (and
     // unchecked); when * is unticked, they re-enable so the operator can

@@ -2,6 +2,18 @@
 # Zabbix MCP Server
 # Copyright (C) 2026 initMAX s.r.o.
 #
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
 
 """Zabbix server views — status, create, edit, delete, test connection."""
 
@@ -59,6 +71,39 @@ def _parse_timeout(raw) -> int:
     return v
 
 
+def _parse_timezone(raw) -> tuple[str, str | None]:
+    """Coerce the optional ``timezone`` form field (issue #75).
+
+    Returns ``(normalised_name, None)`` for a valid zone, ``("", None)``
+    for an empty field (= inherit, the key is dropped from config) and
+    ``("", error_message)`` for anything the loader would refuse at the
+    next boot.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return "", None
+    from zabbix_mcp.timezones import validate_timezone
+    try:
+        return validate_timezone(text), None
+    except ValueError as exc:
+        return "", f"Time zone is invalid: {exc}"
+
+
+def _normalize_url(url: str) -> str:
+    """Normalise a Zabbix URL the way the config loader does.
+
+    The two sides of the drift check come from different places: this
+    page reads the raw TOML string, while ``live_config`` went through
+    the loader, which strips the trailing slash (``config.py``). Comparing
+    them unnormalised reports permanent drift for any URL written as
+    ``https://host/`` - and restarting cannot clear it, because the next
+    boot strips the slash again and the page compares the same two values
+    (reported by @G0nz0uk in #67: a restart banner that survived every
+    restart and appeared only on this page).
+    """
+    return (url or "").rstrip("/")
+
+
 def _render_servers_list(request: Request, admin_app, extra: dict | None = None) -> Response:
     """Render the /servers page. Shared by `servers_view` (GET) and
     `server_create` so that a validation failure on Add Server can
@@ -69,6 +114,7 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
     client_manager = admin_app.client_manager
     servers = []
     drift_detected = False
+    skipped_servers = client_manager.skipped_servers
 
     # Read config to get latest saved values (may differ from live)
     config_zabbix = {}
@@ -99,12 +145,21 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
         # Don't check live status here — it blocks page load.
         # Status will be loaded async via HTMX /servers/{name}/test
         config_changed = False
-        if name not in client_manager.server_names:
+        config_error = skipped_servers.get(name)
+        if config_error is not None:
+            # Section failed validation at boot and was SKIPPED. This
+            # is not restart-pending drift: restarting re-skips it and
+            # re-raises the banner forever (issue #61 - operator
+            # restarted in a loop). Show the validation error on the
+            # card instead and keep it out of drift_detected.
+            pass
+        elif name not in client_manager.server_names:
             # In config but not live — newly added (or renamed in),
             # not yet active.
             config_changed = True
             drift_detected = True
-        elif live_config and cfg.get("url") and cfg["url"] != live_config.url:
+        elif (live_config and cfg.get("url")
+                and _normalize_url(cfg["url"]) != _normalize_url(live_config.url)):
             config_changed = True
             drift_detected = True
 
@@ -114,6 +169,8 @@ def _render_servers_list(request: Request, admin_app, extra: dict | None = None)
             "read_only": read_only,
             "verify_ssl": verify_ssl,
             "config_changed": config_changed,
+            "config_error": config_error,
+            "legacy_auth": bool(cfg.get("legacy_auth")),
             "is_live": name in client_manager.server_names,
         })
 
@@ -161,11 +218,23 @@ async def server_create(request: Request) -> Response:
 
     form = await request.form()
     name = str(form.get("name", "")).strip()
-    url = str(form.get("url", "")).strip()
+    # Normalised on the way in, so the value stored in config.toml is the
+    # one the loader will hand the running client. Tolerating the
+    # difference is the fix for #72; not writing it in the first place is
+    # what stops the mismatch existing at all.
+    url = _normalize_url(str(form.get("url", "")).strip())
     api_token = str(form.get("api_token", "")).strip()
+    # Zabbix < 5.4 has no API tokens — username/password is the
+    # alternative. `password` may stay empty on create (nothing to keep);
+    # it is only stored when the operator typed something.
+    username = str(form.get("username", "")).strip()
+    password = str(form.get("password", "")).strip()
+    legacy_auth = "legacy_auth" in form
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
     request_timeout = _parse_timeout(form.get("request_timeout"))
+    timezone_raw = str(form.get("timezone", "")).strip()
+    timezone_name, timezone_err = _parse_timezone(timezone_raw)
 
     # Re-render the /servers page with the Add Server card open and
     # the typed values preserved so a typo (especially in the URL)
@@ -177,8 +246,15 @@ async def server_create(request: Request) -> Response:
             "form_name": name,
             "form_url": url,
             "form_api_token": api_token,
+            "form_username": username,
+            # The password is deliberately NOT echoed back into the
+            # page on a validation error - it would land in the DOM,
+            # browser history and any page capture. Retyping it is the
+            # lesser cost.
+            "form_legacy_auth": legacy_auth,
             "form_read_only": read_only,
             "form_verify_ssl": verify_ssl,
+            "form_timezone": timezone_raw,
         })
 
     if not name or not _SERVER_NAME_RE.match(name):
@@ -201,6 +277,23 @@ async def server_create(request: Request) -> Response:
     except Exception as exc:
         return _err(f"Invalid URL: {exc}")
 
+    # Auth method. Mirrors _parse_zabbix_server exactly: password login
+    # only behind the explicit legacy checkbox, never as a fallback, and
+    # never together with a token.
+    if legacy_auth:
+        if api_token:
+            return _err("Legacy auth is for Zabbix 5.0-5.2, which has no API tokens. Clear the API token, or untick Legacy auth.")
+        if not username or not password:
+            return _err("Legacy auth needs both a username and a password.")
+    else:
+        if username or password:
+            return _err("Username/password login is only for Zabbix 5.0-5.2 and must be enabled with the Legacy auth checkbox. On Zabbix 5.4+ use an API token.")
+        if not api_token:
+            return _err("API token is required.")
+
+    if timezone_err:
+        return _err(timezone_err)
+
     # Explicit duplicate-name check before tomlkit raises
     # `KeyAlreadyPresent: Key "<name>" already exists.` and we have to
     # reformat its internal "Key" wording into a user-facing
@@ -216,11 +309,21 @@ async def server_create(request: Request) -> Response:
     try:
         server_data = {
             "url": url,
-            "api_token": api_token,
             "read_only": read_only,
             "verify_ssl": verify_ssl,
             "request_timeout": request_timeout,
         }
+        if legacy_auth:
+            # No api_token key at all on a legacy entry, so the file
+            # cannot end up carrying both credentials.
+            server_data["legacy_auth"] = True
+            server_data["username"] = username
+            server_data["password"] = password
+        else:
+            server_data["api_token"] = api_token
+        if timezone_name:
+            # Empty = inherit; the key is simply absent (never "").
+            server_data["timezone"] = timezone_name
         add_config_table(admin_app.config_path, "zabbix", name, server_data)
         logger.info("Zabbix server '%s' added by %s", name, session.user)
         client_ip = request.client.host if request.client else ""
@@ -283,8 +386,15 @@ async def server_edit(request: Request) -> Response:
         )
 
     new_name = str(form.get("name", "")).strip()
-    url = str(form.get("url", "")).strip()
+    url = _normalize_url(str(form.get("url", "")).strip())
     api_token = str(form.get("api_token", "")).strip()
+    # Zabbix < 5.4 auth. username follows the same "text field, blank =
+    # clear" rule as frontend_username; password follows the "leave empty
+    # to keep" rule as frontend_password / api_token. Clearing the
+    # username also drops the stored password so no orphan secret lingers.
+    username = str(form.get("username", "")).strip()
+    password = str(form.get("password", "")).strip()
+    legacy_auth = "legacy_auth" in form
     read_only = "read_only" in form
     verify_ssl = "verify_ssl" in form
     request_timeout = _parse_timeout(form.get("request_timeout"))
@@ -295,6 +405,7 @@ async def server_edit(request: Request) -> Response:
     # cleared it (vs. just not changing).
     frontend_username = str(form.get("frontend_username", "")).strip()
     frontend_password = str(form.get("frontend_password", "")).strip()
+    timezone_name, timezone_err = _parse_timezone(form.get("timezone", ""))
 
     # Validate new name (allow keeping the same name as a no-op rename)
     if not new_name or not _SERVER_NAME_RE.match(new_name):
@@ -318,6 +429,27 @@ async def server_edit(request: Request) -> Response:
                 "danger",
             )
 
+        # Auth method, with the same rules as on create and in
+        # _parse_zabbix_server. "Keep current" semantics apply to the
+        # secret fields, so the check looks at what will be stored, not
+        # only at what was typed.
+        stored = dict(zabbix[server_name])
+        _back = f"/servers/{server_name}/edit"
+        if legacy_auth:
+            if api_token:
+                return admin_app.flash_redirect(_back, "Legacy auth is for Zabbix 5.0-5.2, which has no API tokens. Clear the API token, or untick Legacy auth.", "danger")
+            if not username:
+                return admin_app.flash_redirect(_back, "Legacy auth needs a username.", "danger")
+            if not password and not stored.get("password"):
+                return admin_app.flash_redirect(_back, "Legacy auth needs a password.", "danger")
+        else:
+            if username or password:
+                return admin_app.flash_redirect(_back, "Username/password login is only for Zabbix 5.0-5.2 and must be enabled with the Legacy auth checkbox. On Zabbix 5.4+ use an API token.", "danger")
+            if not api_token and not stored.get("api_token"):
+                return admin_app.flash_redirect(_back, "API token is required when Legacy auth is off.", "danger")
+        if timezone_err:
+            return admin_app.flash_redirect(_back, timezone_err, "danger")
+
         # Apply field updates to the existing table first
         if url:
             zabbix[server_name]["url"] = url
@@ -326,6 +458,12 @@ async def server_edit(request: Request) -> Response:
         zabbix[server_name]["read_only"] = read_only
         zabbix[server_name]["verify_ssl"] = verify_ssl
         zabbix[server_name]["request_timeout"] = request_timeout
+        # timezone (issue #75): text field, blank = inherit = key removed
+        # so the file never carries `timezone = ""`.
+        if timezone_name:
+            zabbix[server_name]["timezone"] = timezone_name
+        else:
+            zabbix[server_name].pop("timezone", None)
         # frontend_username always writes (text field, blank = clear).
         zabbix[server_name]["frontend_username"] = frontend_username
         # frontend_password: only overwrite when the operator typed
@@ -338,6 +476,21 @@ async def server_edit(request: Request) -> Response:
             # User cleared username -> also drop password to avoid
             # orphan secret stored without a matching username.
             zabbix[server_name].pop("frontend_password", None)
+
+        # Zabbix API auth. The legacy checkbox decides which credential
+        # the entry carries; switching it drops the other one so the
+        # file never holds both. Password only overwrites when typed
+        # (empty = keep), same as the token.
+        if legacy_auth:
+            zabbix[server_name]["legacy_auth"] = True
+            zabbix[server_name]["username"] = username
+            if password:
+                zabbix[server_name]["password"] = password
+            zabbix[server_name].pop("api_token", None)
+        else:
+            zabbix[server_name].pop("legacy_auth", None)
+            zabbix[server_name].pop("username", None)
+            zabbix[server_name].pop("password", None)
 
         if renamed:
             # tomlkit has no rename — copy the table data into a new entry
@@ -437,7 +590,7 @@ def _friendly_error(exc: Exception) -> str:
     if "ssl" in lower or "certificate" in lower:
         return "TLS handshake failed. Check the certificate or set verify_ssl = false in config.toml."
     if "401" in msg or "unauthorized" in lower:
-        return "Zabbix returned 401. The API token is invalid or expired."
+        return "Zabbix returned 401. The API token or username/password is invalid or expired."
     if "403" in msg or "forbidden" in lower:
         # Cloudflare / generic WAF in front of the Zabbix frontend
         # randomly returns 403 to direct JSON-RPC POSTs (no browser
@@ -461,6 +614,37 @@ def _friendly_error(exc: Exception) -> str:
     return msg
 
 
+def _probe_user_login(url: str, username: str, password: str, verify_ssl: bool) -> tuple[bool, str]:
+    """Probe a Zabbix server using username/password auth (Zabbix < 5.4).
+
+    Returns ``(auth_ok, version)``: ``auth_ok`` is False when the API is
+    reachable but the credentials were rejected (the API answered
+    ``api_version()`` but ``host.get`` failed). Raises on connection /
+    TLS / DNS failures so the caller can show a red error.
+
+    Mirrors the two-step check the token path already runs: the green
+    status must mean "credentials work", not just "Zabbix answered".
+    """
+    from zabbix_utils import ZabbixAPI
+    api = ZabbixAPI(url=url, validate_certs=verify_ssl, skip_version_check=True)
+    version = str(api.api_version())
+    # Same lock the runtime client applies: legacy login is for releases
+    # without API tokens, full stop. A green "Connected" here on a 7.x
+    # would invite the operator to save a password where a token belongs.
+    if api.version >= 5.4:
+        raise ValueError(
+            f"Zabbix {version} supports API tokens - legacy password login is "
+            f"refused on 5.4 and newer. Untick Legacy auth and use a token."
+        )
+    # Raises on bad credentials as well as connection problems.
+    api.login(user=username, password=password)
+    try:
+        api.host.get(limit=1, output=["hostid"])
+        return True, version
+    except Exception:
+        return False, version
+
+
 async def server_test(request: Request) -> Response:
     """Test connection to a specific Zabbix server (HTMX endpoint)."""
     admin_app = request.app.state.admin_app
@@ -473,26 +657,61 @@ async def server_test(request: Request) -> Response:
 
     from starlette.responses import HTMLResponse
     import html as _html
+
+    # Servers configured with username/password (Zabbix < 5.4) can't go
+    # through client_manager.check_connection, which always logs in with
+    # the API token. Read the *saved* config so we test exactly what will
+    # be loaded on restart; fall back to check_connection for
+    # token-authenticated servers.
+    saved = {}
     try:
-        result = await asyncio.to_thread(client_manager.check_connection, server_name)
-        version = _html.escape(client_manager.get_version(server_name))
-        if result.get("token_ok"):
+        doc = load_config_document(admin_app.config_path)
+        saved = dict(doc.get("zabbix", {}).get(server_name, {}) or {})
+    except Exception:
+        pass
+
+    if saved.get("legacy_auth"):
+        # Explicit legacy entry: password login, version-locked in the probe.
+        try:
+            from zabbix_mcp.config import _resolve_env_vars
+            auth_ok, version = await asyncio.to_thread(
+                _probe_user_login,
+                saved.get("url", ""),
+                _resolve_env_vars(str(saved.get("username", "") or "")),
+                _resolve_env_vars(str(saved.get("password", "") or "")),
+                bool(saved.get("verify_ssl", True)),
+            )
+        except Exception as e:
+            msg = _html.escape(_friendly_error(e))
+            return HTMLResponse(
+                f'<span class="status-dot status-dot-red"></span> Error'
+                f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-danger);">{msg}</span>'
+            )
+        if auth_ok:
             return HTMLResponse(
                 f'<span class="status-dot status-dot-green"></span> Connected'
-                f'<span style="margin-left:8px;">Zabbix {version}</span>'
+                f'<span style="margin-left:8px;">Zabbix {_html.escape(version)}</span>'
                 f'<span class="test-ok" style="margin-left:8px; color:var(--color-success); animation: fadeOut 2s forwards;">&#x2713;</span>'
             )
-        else:
-            return HTMLResponse(
-                f'<span class="status-dot status-dot-yellow"></span> API online'
-                f'<span style="margin-left:8px;">Zabbix {version}</span>'
-                f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-warning);">&#x26A0; Token invalid or expired</span>'
-            )
-    except Exception as e:
-        msg = _html.escape(_friendly_error(e))
         return HTMLResponse(
-            f'<span class="status-dot status-dot-red"></span> Error'
-            f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-danger);">{msg}</span>'
+            f'<span class="status-dot status-dot-yellow"></span> API online'
+            f'<span style="margin-left:8px;">Zabbix {_html.escape(version)}</span>'
+            f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-warning);">&#x26A0; Invalid credentials</span>'
+        )
+
+    result = await asyncio.to_thread(client_manager.check_connection, server_name)
+    version = _html.escape(client_manager.get_version(server_name))
+    if result.get("token_ok"):
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-green"></span> Connected'
+            f'<span style="margin-left:8px;">Zabbix {version}</span>'
+            f'<span class="test-ok" style="margin-left:8px; color:var(--color-success); animation: fadeOut 2s forwards;">&#x2713;</span>'
+        )
+    else:
+        return HTMLResponse(
+            f'<span class="status-dot status-dot-yellow"></span> API online'
+            f'<span style="margin-left:8px;">Zabbix {version}</span>'
+            f'<span style="margin-left:8px; font-size:0.8em; color:var(--color-warning);">&#x26A0; Invalid token or credentials</span>'
         )
 
 
@@ -556,6 +775,9 @@ async def server_test_new(request: Request) -> Response:
     form = await request.form()
     url = str(form.get("url", "")).strip()
     api_token = str(form.get("api_token", "")).strip()
+    username = str(form.get("username", "")).strip()
+    password = str(form.get("password", "")).strip()
+    legacy_auth = form.get("legacy_auth") == "1"
     verify_ssl = form.get("verify_ssl") == "1"
 
     # SECURITY: validate URL scheme and block internal/private addresses (SSRF prevention)
@@ -619,14 +841,42 @@ async def server_test_new(request: Request) -> Response:
     except (socket.gaierror, ValueError):
         pass  # Let ZabbixAPI handle DNS errors
 
-    if not url or not api_token:
-        return HTMLResponse('<span class="text-danger">URL and API token are required</span>')
+    if not url:
+        return HTMLResponse('<span class="text-danger">URL is required</span>')
+
+    # Auth method: either an API token or a username/password pair
+    # (Zabbix < 5.4 has no API tokens). Mirrors _parse_zabbix_server.
+    # Same rules as save: legacy only behind the checkbox, never together
+    # with a token, never as a fallback.
+    if legacy_auth:
+        if api_token:
+            return HTMLResponse('<span class="text-danger">Legacy auth is for Zabbix 5.0 / 5.2, which has no API tokens - clear the token or untick Legacy auth</span>')
+        if not username or not password:
+            return HTMLResponse('<span class="text-danger">Legacy auth needs both a username and a password</span>')
+    else:
+        if username or password:
+            return HTMLResponse('<span class="text-danger">Username/password login requires the Legacy auth checkbox (Zabbix 5.0 / 5.2 only)</span>')
+        if not api_token:
+            return HTMLResponse('<span class="text-danger">API token is required</span>')
 
     try:
         from zabbix_utils import ZabbixAPI
+        # Throwaway probe: skip the library's min/max version gate here as
+        # before (an 8.0 is 'experimental' and must still test green with
+        # a token). The legacy version lock below is our own check.
         api = ZabbixAPI(url=url, validate_certs=verify_ssl, skip_version_check=True)
-        api.login(token=api_token)
         version = _html.escape(str(api.api_version()))
+        if legacy_auth:
+            # Version lock, identical to the runtime client and the
+            # saved-server probe.
+            if api.version >= 5.4:
+                return HTMLResponse(
+                    f'<span class="status-dot status-dot-red"></span>'
+                    f'<span style="color:var(--color-danger);"> Zabbix {version} supports API tokens - legacy password login is refused on 5.4 and newer. Untick Legacy auth and use a token.</span>'
+                )
+            api.login(user=username, password=password)
+        else:
+            api.login(token=api_token)
     except Exception as e:
         msg = _html.escape(_friendly_error(e))
         return HTMLResponse(
@@ -635,10 +885,10 @@ async def server_test_new(request: Request) -> Response:
         )
     # api_version() is unauthenticated - it only proves the URL
     # points at a Zabbix frontend. Hit an authenticated method too
-    # so the green status reflects "token works" not just "Zabbix
-    # answered". Reported 2026-04-27 with a video where the dialog
-    # said OK against a wrong api_token. Mirrors the same two-step
-    # check the live `/servers/<n>/test` endpoint already runs.
+    # so the green status reflects "credentials work" not just
+    # "Zabbix answered". Reported 2026-04-27 with a video where the
+    # dialog said OK against a wrong api_token. Mirrors the same
+    # two-step check the live `/servers/<n>/test` endpoint already runs.
     try:
         api.host.get(limit=1, output=["hostid"])
         return HTMLResponse(
@@ -648,5 +898,5 @@ async def server_test_new(request: Request) -> Response:
     except Exception:
         return HTMLResponse(
             f'<span class="status-dot status-dot-yellow"></span>'
-            f'<span style="color:var(--color-warning);"> API online (Zabbix {version}) but the API token was rejected. Check that the token has at least read permissions.</span>'
+            f'<span style="color:var(--color-warning);"> API online (Zabbix {version}) but the credentials were rejected. Check that the token or username/password has at least read permissions.</span>'
         )
