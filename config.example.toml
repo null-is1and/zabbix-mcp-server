@@ -36,6 +36,13 @@ host = "127.0.0.1"
 # TCP port for the HTTP server (1–65535).
 port = 8080
 
+# Time zone for rendering timestamps (the "<field>_local" result fields) and
+# for reading date-times sent without a zone. IANA name, "UTC" or "system"
+# (the zone of the host running this server). Fallback for every Zabbix
+# server; [zabbix.<name>].timezone and [tokens.<id>].timezone override it.
+# Empty (default) = ask Zabbix (API user's zone, then frontend default).
+# timezone = "Europe/London"
+
 # External URL clients use to reach this MCP server. Set this when the
 # server is exposed via a public DNS name, a reverse proxy, or NAT - or
 # whenever `host` is "0.0.0.0" / "::" and remote clients would otherwise
@@ -103,6 +110,25 @@ rate_limit = 300
 # Set to false to always return all fields (pre-1.13 behavior).
 compact_output = true
 
+# Validate get requests against the per-method contract before they reach
+# Zabbix (default: true). A sort field the method cannot sort by, a filter
+# on a text property, an unknown selectXxx / parameter / output property, or
+# a parameter from a newer Zabbix release than the server runs is refused
+# with the allowed values in the message. Set to false to forward every
+# request as-is (Zabbix then rejects some and silently ignores the rest).
+# zabbix_raw_api_call is never validated.
+# validate_get_params = true
+
+# Drop, before every create / update tool call, the keys the matching get
+# tool returns but Zabbix refuses on write (default: true): read-only
+# properties (templateid, flags, state, error, lastclock), row identifiers
+# inside nested arrays (operations[].operationid), and sub-objects a
+# selectXxx produced (hosts, triggers). Measured per Zabbix release on real
+# servers (api/write_contracts.json), so "read it, change one thing, write
+# it back" works. Set to false to send every payload as-is.
+# zabbix_raw_api_call is never touched.
+# strip_write_params = true
+
 # Maximum characters per tool response before truncation. Default 50000
 # (roughly 12k tokens), minimum 5000. Increase for workflows that export
 # large Zabbix templates via configuration_export (a typical built-in
@@ -110,6 +136,15 @@ compact_output = true
 # response. Examples: 200000 for medium templates, 500000 for large
 # built-in templates.
 # response_max_chars = 50000
+
+# How long (seconds) an MCP client may treat a tools/list response as
+# fresh. Sent as the 2026-07-28 `ttlMs` cache hint; the accompanying
+# `cacheScope` is always "private" because the catalog is filtered per
+# token. Default 300 (5 minutes). The catalog only changes on restart,
+# so caching saves re-sending ~100k tokens of tool schemas on every new
+# session. Set to 0 to disable client caching (always re-fetch); max
+# 86400. Pre-2026 clients ignore the field entirely.
+# tools_list_cache_ttl = 300
 
 # Allow stdio clients to pass `raw_json: true` and skip the
 # "[System: The following is raw data ...]" prompt-injection mitigation
@@ -250,9 +285,20 @@ compact_output = true
 #   1. tools     - limit registered tools to relevant prefixes (reduces noise)
 #   2. read_only - block all writes on servers that should be read-only
 #   3. Zabbix User Roles - enforce method-level access control at the API level
+#
+# On a read-only server the write tools are still registered and, for any
+# caller without a read-only token (stdio, the legacy auth_token, a
+# read-write token), still listed: the model sees host_delete, tries it,
+# and is refused. Set this to false to leave them out of the catalog
+# entirely. It skips every write API tool plus action_prepare,
+# action_confirm and zabbix_raw_api_call, the same set a read-only token
+# never sees, and cuts a full catalog by about two thirds (255 tools to
+# 75 today), under client limits such as OpenAI's 128. Call-time checks
+# are unchanged. Default: true.
+# register_write_tools = false
 
 # Filter which tool groups are exposed via MCP.
-# When not set or commented out, all ~225 tools are registered (default).
+# When not set or commented out, all ~255 tools are registered (default).
 # This is useful when your LLM has a tool limit (e.g. OpenAI max 128 tools).
 #
 # Use category names to include entire groups at once, individual tool prefixes,
@@ -408,6 +454,79 @@ compact_output = true
 # refresh_token_ttl_seconds = 604800
 
 # ---------------------------------------------------------------------------
+# Report delivery (optional)
+# ---------------------------------------------------------------------------
+# By default `report_generate` returns the PDF inline as a base64 data URI.
+# A big report can blow past an LLM's context window or a reverse-proxy read
+# timeout, so the report never arrives. These two channels hand the payload
+# over out of band instead, and the tool returns a short receipt (path or
+# recipients) rather than the document itself.
+#
+# Both are OFF by default and fenced by the operator: an AI client may ask
+# for delivery, but never decides where the file lands or who receives it.
+
+# [reporting]
+# Absolute path to a directory the server may write reports into. Required
+# before `save_to_file: true` works; the filename is generated server-side
+# and the resolved path is asserted to stay inside this directory.
+#
+# /var/lib/zabbix-mcp/reports is created by the installer (systemd
+# StateDirectory) and works out of the box. If you point this somewhere
+# else, add that path to the unit's ReadWritePaths - the service runs with
+# ProtectSystem=strict, so any other location is read-only no matter who
+# owns it:  systemctl edit zabbix-mcp-server
+# output_dir = "/var/lib/zabbix-mcp/reports"
+
+# Resource links (zabbix://reports/<id>) let report_generate hand the client
+# a pointer instead of a base64 blob, so the PDF never enters the model's
+# context. These two bound how long and how much is held in memory for that.
+# link_ttl = 3600           # seconds a link stays fetchable (60 - 86400)
+# link_max_reports = 20     # reports held at once; oldest evicted first (1 - 500)
+
+# Publish the same report at a plain HTTP(S) URL as well, so the AI can hand
+# the user a link they can click - a zabbix:// link only an MCP client can
+# open. The random report id in the path IS the credential (unguessable, one
+# report, dies with the link), so the route needs no bearer token.
+#
+# SET [server].public_url - without it there is usually no link. The URL is
+# only built from an address something vouched for: public_url, or
+# X-Forwarded-Host + X-Forwarded-Proto from a peer in trusted_proxies. The
+# local bind and a bare Host are never used: behind a proxy both read
+# 127.0.0.1, which would point a remote user at their own machine.
+# Behind a reverse proxy that forwards a LIST of paths rather than all of `/`,
+# forward /reports/ too, otherwise the link 404s:
+#   ProxyPass        /reports/ http://127.0.0.1:8080/reports/
+#   ProxyPassReverse /reports/ http://127.0.0.1:8080/reports/
+#
+# No URL is emitted on stdio transport - there is no HTTP listener - and the
+# resource link keeps working on every transport either way.
+# download_urls = true
+
+# [reporting.email]
+# SMTP settings for `email_to`. When enabled, smtp_host, from_address and
+# allowed_recipients are all required.
+# enabled = false
+# smtp_host = "smtp.example.com"
+# smtp_port = 587
+# smtp_user = ""                     # empty = no SMTP auth
+# smtp_password = "${SMTP_PASSWORD}" # ${ENV_VAR} expansion supported
+# from_address = "zabbix-mcp@example.com"
+# use_starttls = true                # STARTTLS on the plain port (587)
+# use_ssl = false                    # implicit TLS instead (465)
+# timeout = 30
+#
+# THE SAFETY FENCE. The AI client picks the recipient ("email the report to
+# petr@example.com"); this list decides how far it may reach:
+#   ["*@example.com"]      - the usual choice: any colleague, nobody outside
+#   ["ops@example.com"]    - one fixed mailbox only
+#   ["*"]                  - any address at all. Works, but a confused or
+#                            prompt-injected model could then mail monitoring
+#                            data outside the company.
+# An empty list means nothing can be mailed, and enabling email without a
+# list is refused at startup.
+# allowed_recipients = ["ops@example.com", "*@example.com"]
+
+# ---------------------------------------------------------------------------
 # Admin Portal
 # ---------------------------------------------------------------------------
 # Web-based administration portal for managing MCP tokens, users, report
@@ -488,6 +607,7 @@ update_check_enabled = true
 # allowed_ips = ["10.0.0.0/24"]   # Optional IP/CIDR whitelist
 # allowed_servers = ["*"]          # Optional: restrict to specific Zabbix servers
 # expires_at = "2026-12-31T23:59:59Z"  # Optional expiry (ISO 8601)
+# timezone = "Europe/London"      # Optional: zone for this client's timestamps (wins over [zabbix.*] and [server])
 #
 # allow_raw_json = false           # When true, this token may pass `raw_json: true`
 #                                  # on any tool call to skip the
@@ -515,11 +635,29 @@ update_check_enabled = true
 # The /api_jsonrpc.php path is added automatically by the API client.
 url = "https://zabbix.example.com"
 
-# Zabbix API token for authentication (REQUIRED).
-# This authenticates the MCP server to Zabbix — NOT the same as auth_token above.
-# Create one in Zabbix: User settings > API tokens > Create API token.
-# Tokens inherit the permissions of the Zabbix user they belong to.
+# Zabbix API token for authentication. This authenticates the MCP server
+# to Zabbix — NOT the same as auth_token above. Create one in Zabbix 5.4+:
+# User settings > API tokens > Create API token. Tokens inherit the
+# permissions of the Zabbix user they belong to.
+#
+# Required - with one explicit exception, below.
 api_token = "your-api-token-here"
+
+# LEGACY PASSWORD LOGIN - Zabbix 5.0 and 5.2 ONLY. READ BEFORE ENABLING.
+# Those two releases have no API tokens (introduced in 5.4) and are out
+# of upstream support. Enabling this makes the MCP server hold a Zabbix
+# USER PASSWORD instead of a revocable, scoped token: that is a security
+# risk you are choosing, and this path is best effort - it is not in our
+# test matrix. The right fix is upgrading Zabbix.
+# Rules: legacy_auth and api_token on one entry is refused; username/
+# password WITHOUT legacy_auth = true is refused (never a silent
+# fallback); and on connect the server refuses legacy login against any
+# Zabbix 5.4 or newer, so it cannot replace tokens where they exist.
+# Every start logs a WARNING for each legacy entry. Keep the password in
+# the environment via ${VAR}, and use a dedicated low-privilege user.
+# legacy_auth = true
+# username = "zabbix-mcp"
+# password = "${ZABBIX_OLD_PASSWORD}"
 
 # You can reference an environment variable instead of storing the token in plain text:
 # api_token = "${ZABBIX_PROD_TOKEN}"
@@ -533,6 +671,11 @@ read_only = true
 # or test environments. Should always be true in production.
 # Default: true.
 verify_ssl = true
+
+# Time zone for this server's timestamps. Overrides [server].timezone;
+# a token's timezone overrides this. IANA name, "UTC" or "system".
+# Empty (default) = the zone Zabbix reports for the API user.
+# timezone = "Europe/London"
 
 # Skip Zabbix API version compatibility check. Enable this when connecting
 # to a Zabbix version newer than what zabbix-utils has been tested with.
@@ -565,3 +708,4 @@ verify_ssl = true
 # read_only = false
 # verify_ssl = false
 # skip_version_check = false
+# timezone = "Europe/London"

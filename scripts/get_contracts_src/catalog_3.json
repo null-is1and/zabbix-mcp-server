@@ -1,0 +1,2680 @@
+{
+ "methods": {
+  "dashboard.get": {
+   "object": "dashboard",
+   "sortfield": [
+    "dashboardid"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "dashboardids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectWidgets": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": null
+    },
+    "selectUserGroups": {
+     "type": "query",
+     "since": null
+    },
+    "selectPages": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "selectWidgets listed only on 5.0 (replaced by selectPages from 6.0, dashboard pages introduced in 5.4). sortfield identical 5.0-8.0: dashboardid."
+   ]
+  },
+  "templatedashboard.get": {
+   "object": "templatedashboard",
+   "sortfield": [
+    "dashboardid",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "dashboardids": {
+     "type": "ID/array",
+     "since": "6.0"
+    },
+    "templateids": {
+     "type": "ID/array",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectPages": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Documentation page for this method does not exist on 5.0; first documented release among the checked ones is 6.0, all items marked since 6.0.",
+    "templatedashboard introduced in Zabbix 5.2 (no 5.0 page); first checked release 6.0. sortfield identical 6.0-8.0: dashboardid, name."
+   ]
+  },
+  "report.get": {
+   "object": "report",
+   "sortfield": [
+    "reportid",
+    "name",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "reportids": {
+     "type": "ID/array",
+     "since": "6.0"
+    },
+    "expired": {
+     "type": "boolean",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectUsers": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectUserGroups": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Documentation page for this method does not exist on 5.0; first documented release among the checked ones is 6.0, all items marked since 6.0.",
+    "Scheduled reports introduced in Zabbix 5.4 (no 5.0 page); first checked release 6.0. editable is NOT listed on the page (any version). sortfield identical 6.0-8.0: reportid, name, status."
+   ]
+  },
+  "hanode.get": {
+   "object": "hanode",
+   "sortfield": [
+    "name",
+    "lastaccess",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "sortfield",
+    "sortorder"
+   ],
+   "params": {
+    "ha_nodeids": {
+     "type": "ID/array",
+     "since": "6.0"
+    }
+   },
+   "selects": {},
+   "filter_props": [
+    "name",
+    "address",
+    "status"
+   ],
+   "search_props": null,
+   "notes": [
+    "Documentation page for this method does not exist on 5.0; first documented release among the checked ones is 6.0, all items marked since 6.0.",
+    "filter: \"Supports properties: name, address, status.\" (explicit restriction, identical on 6.0-8.0).",
+    "search, searchByAny, searchWildcardsEnabled, startSearch, excludeSearch and editable are NOT listed on the page (any version) - search_props left null because there is no search parameter at all.",
+    "countOutput is typed \"flag\" on this page (not boolean). Method is only available to Super admin user type.",
+    "sortfield possible values identical on 6.0-8.0: name, lastaccess, status."
+   ]
+  },
+  "history.get": {
+   "object": "history",
+   "sortfield": [
+    "itemid",
+    "clock",
+    "ns"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "history": {
+     "type": "integer",
+     "since": null,
+     "values": {
+      "0": "numeric float",
+      "1": "character",
+      "2": "log",
+      "3": "numeric unsigned",
+      "4": "text",
+      "5": "binary",
+      "6": "JSON"
+     },
+     "default": "3",
+     "values_since": {
+      "5": "7.0",
+      "6": "8.0"
+     }
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    },
+    "maxValueSize": {
+     "type": "integer",
+     "since": "8.0",
+     "default": "65536",
+     "values": {
+      "range": "1-134217728",
+      "null": "no limit"
+     }
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "history parameter: 5.0/6.0/6.2 pages list 0 numeric float, 1 character, 2 log, 3 numeric unsigned, 4 text, \"Default: 3\"; 6.4 same set with \"3 - (default)\"; 7.0/7.2/7.4 add \"5 - binary\"; 8.0 adds \"6 - JSON\". Default is 3 on every version.",
+    "maxValueSize (8.0 only): possible range 1-134217728 (1 byte to 128MiB), null = no limit, default 65536 (64KiB), supported if history is \"binary\" or \"JSON\".",
+    "sortfield possible values: 5.0/6.0/6.2 pages list only \"itemid and clock\"; 6.4+ list itemid, clock, ns; 8.0 adds \"Does not support sorting by ns if history data is stored in ClickHouse\".",
+    "search description on 7.4 and 8.0 pages says \"Does not support searching by value if history is set to 6 (JSON)\" (7.4 page mentions type 6 even though 7.4 does not list it as a history value).",
+    "preservekeys is NOT listed on the history.get page (any version); editable, excludeSearch, filter, search* and sort* are listed.",
+    "sortfield ns: listed on the 6.4 page but Zabbix 6.4.21 answers 'value must be one of itemid, clock' (verified live); accepted from 7.0"
+   ],
+   "sortfield_versions": {
+    "ns": {
+     "since": "7.0"
+    }
+   }
+  },
+  "trend.get": {
+   "object": "trend",
+   "sortfield": [],
+   "common": [
+    "countOutput",
+    "limit",
+    "output"
+   ],
+   "params": {
+    "itemids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Page lists ONLY itemids, time_from, time_till, countOutput, limit, output. NOT listed (any version 5.0-8.0): editable, excludeSearch, filter, preservekeys, search, searchByAny, searchWildcardsEnabled, sortfield, sortorder, startSearch. sortfield is therefore []."
+   ]
+  },
+  "event.get": {
+   "object": "event",
+   "sortfield": [
+    "eventid",
+    "objectid",
+    "clock"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "eventids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "objectids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "applicationids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.0"
+    },
+    "source": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "object": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "acknowledged": {
+     "type": "boolean",
+     "since": null
+    },
+    "suppressed": {
+     "type": "boolean",
+     "since": null
+    },
+    "severities": {
+     "type": "integer/array",
+     "since": null
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": null,
+     "values": {
+      "0": "And/Or",
+      "2": "Or"
+     },
+     "default": "0"
+    },
+    "tags": {
+     "type": "array",
+     "since": null
+    },
+    "eventid_from": {
+     "type": "string",
+     "since": null
+    },
+    "eventid_till": {
+     "type": "string",
+     "since": null
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    },
+    "problem_time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "problem_time_till": {
+     "type": "timestamp",
+     "since": null
+    },
+    "value": {
+     "type": "integer/array",
+     "since": null
+    },
+    "symptom": {
+     "type": "boolean",
+     "since": "6.4"
+    },
+    "action": {
+     "type": "integer",
+     "since": "7.0",
+     "values": {
+      "bitmask": "sum of event.acknowledge action bitmap values, e.g. 34 for acknowledge and suppress"
+     }
+    },
+    "action_userids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "trigger_severities": {
+     "type": "integer/array",
+     "since": "7.0"
+    },
+    "groupBy": {
+     "type": "string/array",
+     "since": "7.0",
+     "values": {
+      "objectid": "objectid"
+     }
+    }
+   },
+   "selects": {
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectRelatedObject": {
+     "type": "query",
+     "since": null
+    },
+    "select_alerts": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "select_acknowledges": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectSuppressionData": {
+     "type": "query",
+     "since": null
+    },
+    "selectAcknowledges": {
+     "type": "query",
+     "since": "7.0"
+    },
+    "selectAlerts": {
+     "type": "query",
+     "since": "7.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield: 5.0/6.0/6.2 pages: \"eventid, objectid and clock\"; 7.0+ adds \"Possible values when used together with groupBy: objectid\" and \"when used together with countOutput and groupBy: objectid, rowscount\".",
+    "select_alerts and select_acknowledges: listed 5.0-6.4, marked \"(deprecated) please use selectAlerts/selectAcknowledges\" on 7.0, gone from 7.2+. selectAlerts/selectAcknowledges first listed on 7.0.",
+    "applicationids listed only on 5.0 (applications removed in 5.4). groupBy possible values: objectid (7.0+).",
+    "8.0 page adds maintenanceid to the selectAcknowledges event update object properties.",
+    "tags param type is \"array of objects\" on 5.0-6.4 pages and \"array\" on 7.0+."
+   ]
+  },
+  "problem.get": {
+   "object": "problem",
+   "sortfield": [
+    "eventid"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "eventids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "objectids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "applicationids": {
+     "type": "string/array",
+     "since": null,
+     "removed": "6.0"
+    },
+    "source": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "object": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "acknowledged": {
+     "type": "boolean",
+     "since": null
+    },
+    "suppressed": {
+     "type": "boolean",
+     "since": null
+    },
+    "severities": {
+     "type": "integer/array",
+     "since": null
+    },
+    "evaltype": {
+     "type": "integer",
+     "since": null,
+     "values": {
+      "0": "And/Or",
+      "2": "Or"
+     },
+     "default": "0"
+    },
+    "tags": {
+     "type": "array",
+     "since": null
+    },
+    "recent": {
+     "type": "boolean",
+     "since": null
+    },
+    "eventid_from": {
+     "type": "string",
+     "since": null
+    },
+    "eventid_till": {
+     "type": "string",
+     "since": null
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    },
+    "symptom": {
+     "type": "boolean",
+     "since": "6.4"
+    },
+    "action": {
+     "type": "integer",
+     "since": "7.0"
+    },
+    "action_userids": {
+     "type": "ID/array",
+     "since": "7.0"
+    }
+   },
+   "selects": {
+    "selectAcknowledges": {
+     "type": "query",
+     "since": null
+    },
+    "selectTags": {
+     "type": "query",
+     "since": null
+    },
+    "selectSuppressionData": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield possible values identical 5.0-8.0: eventid. applicationids listed only on 5.0. symptom since 6.4; action and action_userids since 7.0. 8.0 page adds maintenanceid to the selectAcknowledges problem update object."
+   ]
+  },
+  "map.get": {
+   "object": "map",
+   "sortfield": [
+    "name",
+    "width",
+    "height"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "sysmapids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "expandUrls": {
+     "type": "flag",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectIconMap": {
+     "type": "query",
+     "since": null
+    },
+    "selectLinks": {
+     "type": "query",
+     "since": null
+    },
+    "selectSelements": {
+     "type": "query",
+     "since": null
+    },
+    "selectUrls": {
+     "type": "query",
+     "since": null
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": null
+    },
+    "selectUserGroups": {
+     "type": "query",
+     "since": null
+    },
+    "selectShapes": {
+     "type": "query",
+     "since": null
+    },
+    "selectLines": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield identical 5.0-8.0: name, width, height. expandUrls is typed flag. Parameter set unchanged 5.0-8.0."
+   ]
+  },
+  "task.get": {
+   "object": "task",
+   "sortfield": [],
+   "common": [
+    "output",
+    "preservekeys"
+   ],
+   "params": {
+    "taskids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Page lists only taskids, output, preservekeys (no sortfield, filter, search, countOutput, limit, editable). Only available to Super admin user type."
+   ]
+  },
+  "sla.get": {
+   "object": "sla",
+   "sortfield": [
+    "slaid",
+    "name",
+    "period",
+    "slo",
+    "effective_date",
+    "timezone",
+    "status",
+    "description"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "slaids": {
+     "type": "ID/array",
+     "since": "6.0"
+    },
+    "serviceids": {
+     "type": "ID/array",
+     "since": "6.0"
+    }
+   },
+   "selects": {
+    "selectSchedule": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectExcludedDowntimes": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectServiceTags": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Documentation page for this method does not exist on 5.0; first documented release among the checked ones is 6.0, all items marked since 6.0.",
+    "SLA object introduced in Zabbix 6.0 (no 5.0 page). sortfield identical 6.0-8.0: slaid, name, period, slo, effective_date, timezone, status, description. selectSchedule/selectExcludedDowntimes/selectServiceTags support count."
+   ]
+  },
+  "action.get": {
+   "object": "action",
+   "sortfield": [
+    "actionid",
+    "name",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "actionids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "triggerids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "mediatypeids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "usrgrpids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "scriptids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectFilter": {
+     "type": "query",
+     "since": null
+    },
+    "selectOperations": {
+     "type": "query",
+     "since": null
+    },
+    "selectRecoveryOperations": {
+     "type": "query",
+     "since": null
+    },
+    "selectAcknowledgeOperations": {
+     "type": "query",
+     "since": null,
+     "removed": "6.0"
+    },
+    "selectUpdateOperations": {
+     "type": "query",
+     "since": "6.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "editable is listed on the 5.0 and 6.2 pages but NOT on 6.0, 6.4, 7.0, 7.2, 7.4, 8.0 - omitted from common (7.4 base).",
+    "selectAcknowledgeOperations listed only on 5.0; replaced by selectUpdateOperations from 6.0. sortfield possible values identical 5.0-8.0: actionid, name, status."
+   ]
+  },
+  "alert.get": {
+   "object": "alert",
+   "sortfield": [
+    "alertid",
+    "clock",
+    "eventid",
+    "mediatypeid",
+    "sendto",
+    "status"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "alertids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "actionids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "eventids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "mediatypeids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "objectids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "eventobject": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "eventsource": {
+     "type": "integer",
+     "since": null,
+     "default": "0"
+    },
+    "time_from": {
+     "type": "timestamp",
+     "since": null
+    },
+    "time_till": {
+     "type": "timestamp",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectMediatypes": {
+     "type": "query",
+     "since": null
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": null
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "sortfield possible values identical 5.0-8.0: alertid, clock, eventid, mediatypeid, sendto, status. Parameter set unchanged 5.0-8.0 (only type naming string/array -> ID/array on 7.0)."
+   ]
+  },
+  "mediatype.get": {
+   "object": "mediatype",
+   "sortfield": [
+    "mediatypeid"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "mediatypeids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "mediaids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "userids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectMessageTemplates": {
+     "type": "query",
+     "since": null
+    },
+    "selectUsers": {
+     "type": "query",
+     "since": null
+    },
+    "selectActions": {
+     "type": "query",
+     "since": "7.0"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "filter: \"Possible Media type object properties for Admin and User type users: mediatypeid, name, type, status, maxattempts\"; search: \"for Admin and User type users: name, description\"; output: Admin/User may retrieve only mediatypeid, name, type, status, maxattempts, description. These are user-type restrictions, not a general restriction, so filter_props/search_props left null.",
+    "selectMessageTemplates: supported for Super admin type users. selectActions since 7.0. sortfield identical 5.0-8.0: mediatypeid."
+   ]
+  },
+  "script.get": {
+   "object": "script",
+   "sortfield": [
+    "scriptid",
+    "name"
+   ],
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "groupids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "hostids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "scriptids": {
+     "type": "ID/array",
+     "since": null
+    },
+    "usrgrpids": {
+     "type": "ID/array",
+     "since": null
+    }
+   },
+   "selects": {
+    "selectGroups": {
+     "type": "query",
+     "since": null,
+     "removed": "7.2"
+    },
+    "selectHosts": {
+     "type": "query",
+     "since": null
+    },
+    "selectActions": {
+     "type": "query",
+     "since": "6.0"
+    },
+    "selectHostGroups": {
+     "type": "query",
+     "since": "6.2"
+    }
+   },
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "selectGroups listed 5.0-7.0, gone from 7.2 (replaced by selectHostGroups, first listed 6.2). selectActions since 6.0. sortfield identical 5.0-8.0: scriptid, name."
+   ]
+  },
+  "sla.getsli": {
+   "object": "sla",
+   "sortfield": [],
+   "common": [],
+   "params": {
+    "slaid": {
+     "type": "ID",
+     "since": "6.0",
+     "required": true
+    },
+    "period_from": {
+     "type": "timestamp",
+     "since": "6.0"
+    },
+    "period_to": {
+     "type": "timestamp",
+     "since": "6.0"
+    },
+    "periods": {
+     "type": "integer",
+     "since": "6.0",
+     "values": {
+      "range": "1-100"
+     }
+    },
+    "serviceids": {
+     "type": "ID/array",
+     "since": "6.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Documentation page for this method does not exist on 5.0; first documented release among the checked ones is 6.0, all items marked since 6.0.",
+    "Not a classic get method (returns periods/serviceids/sli structure); sortfield and common left empty. slaid is required. periods: possible values 1-100. Without period_from/period_to/periods the last 20 periods are returned (see \"Partitioning of periods\" table).",
+    "Type column quirks on older pages: 6.2 lists period_from/period_to as integer and periods as array; 6.4 lists periods as array; 6.0 and 7.0+ list timestamp/integer as recorded here (7.4 base)."
+   ]
+  },
+  "script.getscriptsbyhosts": {
+   "object": "script",
+   "sortfield": [],
+   "common": [],
+   "params": {
+    "hostid": {
+     "type": "ID",
+     "since": "7.0",
+     "required": true
+    },
+    "scriptid": {
+     "type": "ID",
+     "since": "7.0"
+    },
+    "manualinput": {
+     "type": "string",
+     "since": "7.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Page exists on all versions 5.0-8.0.",
+    "Documentation page for this method does not exist on 5.0, 6.0, 6.2, 6.4; first documented release among the checked ones is 7.0, all items marked since 7.0.",
+    "Not a classic get method; sortfield and common left empty. 7.0+ signature: object/array of objects {hostid (required, must be unique), scriptid, manualinput}. On 5.0, 6.0, 6.2, 6.4 the page documents \"object script.getscriptsbyhosts(array hostIds)\" with a single parameter \"(string/array) IDs of hosts to return scripts for\" and no parameter table; the named parameters are therefore marked since 7.0."
+   ]
+  },
+  "script.getscriptsbyevents": {
+   "object": "script",
+   "sortfield": [],
+   "common": [],
+   "params": {
+    "eventid": {
+     "type": "ID",
+     "since": "7.0",
+     "required": true
+    },
+    "scriptid": {
+     "type": "ID",
+     "since": "7.0"
+    },
+    "manualinput": {
+     "type": "string",
+     "since": "7.0"
+    }
+   },
+   "selects": {},
+   "filter_props": null,
+   "search_props": null,
+   "notes": [
+    "Not a classic get method; sortfield and common left empty. Page does not exist on 5.0, 6.0, 6.2 (404); 6.4 documents \"object script.getscriptsbyevents(array eventIds)\" with a single \"(string/array) IDs of events to return scripts for\". 7.0+ signature: object/array of objects {eventid (required, must be unique), scriptid, manualinput}; named parameters marked since 7.0."
+   ]
+  }
+ },
+ "objects": {
+  "dashboard": {
+   "props": {
+    "dashboardid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "private": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "display_period": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "auto_start": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "display_period and auto_start since 6.0 (5.0 page: dashboardid, name, userid, private only)."
+   ]
+  },
+  "templatedashboard": {
+   "props": {
+    "dashboardid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "display_period": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "auto_start": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "uuid": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "Object page does not exist on 5.0; first documented release among the checked ones is 6.0.",
+    "Introduced in 5.2; no 5.0 page."
+   ]
+  },
+  "report": {
+   "props": {
+    "reportid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "dashboardid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "period": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "cycle": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "start_time": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "weekdays": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "active_since": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "active_till": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "subject": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "message": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "state": {
+     "type": "integer",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "lastsent": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "info": {
+     "type": "string",
+     "readonly": true,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "Object page does not exist on 5.0; first documented release among the checked ones is 6.0.",
+    "Introduced in 5.4; no 5.0 page. state, lastsent, info are read-only."
+   ]
+  },
+  "hanode": {
+   "props": {
+    "ha_nodeid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "address": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "port": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "lastaccess": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "Object page does not exist on 5.0; first documented release among the checked ones is 6.0.",
+    "Introduced in 6.0; no 5.0 page. Doc does not mark any property read-only (object is read-only as a whole: hanode has only a get method)."
+   ]
+  },
+  "history": {
+   "props": {
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "ns": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "value": {
+     "type": "float",
+     "readonly": false,
+     "since": null,
+     "type_by_history_type": {
+      "0": "float",
+      "1": "string",
+      "2": "text",
+      "3": "integer",
+      "4": "text",
+      "5": "text",
+      "6": "text"
+     }
+    }
+   },
+   "notes": [
+    "Generic history object = properties common to all history types (Float history table on 7.4: clock, itemid, ns, value). value type differs per history type: float (Float history), integer (Integer history), string (String history), text (Text, Log, Binary, JSON history). Text history and Log history additionally have \"id\" (ID of the history entry); Log history additionally has logeventid (integer), severity (integer), source (string), timestamp (timestamp). Binary history section exists on 7.0+ pages, JSON history section on 8.0 page. Page sections 5.0-6.4: Float, Integer, String, Text, Log."
+   ]
+  },
+  "trend": {
+   "props": {
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "itemid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "num": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "value_min": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "value_avg": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    },
+    "value_max": {
+     "type": "float",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "Property set unchanged 5.0-8.0; itemid typed integer on 5.0-6.4 pages, ID on 7.0+."
+   ]
+  },
+  "event": {
+   "props": {
+    "eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "source": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "object": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "objectid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "acknowledged": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "ns": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "value": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "severity": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "r_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "c_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "correlationid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "suppressed": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "opdata": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "urls": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "cause_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.4"
+    }
+   },
+   "notes": [
+    "cause_eventid since 6.4. urls type on the 6.2 page is written \"array of Media type URLs\". 7.0+ pages type ID columns as \"ID\" (string on 5.0-6.4)."
+   ]
+  },
+  "problem": {
+   "props": {
+    "eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "source": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "object": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "objectid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "ns": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "r_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "r_clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "r_ns": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "correlationid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "acknowledged": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "severity": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "suppressed": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "opdata": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "urls": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "cause_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "6.4"
+    }
+   },
+   "notes": [
+    "cause_eventid since 6.4. 8.0 object table identical to 7.4."
+   ]
+  },
+  "map": {
+   "props": {
+    "sysmapid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "height": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "width": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "backgroundid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "expand_macros": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "expandproblem": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "grid_align": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "grid_show": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "grid_size": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "highlight": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "iconmapid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "label_format": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_location": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_string_host": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "label_string_hostgroup": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "label_string_image": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "label_string_map": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "label_string_trigger": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "label_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_type_host": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_type_hostgroup": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_type_image": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_type_map": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "label_type_trigger": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "markelements": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "severity_min": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_unack": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "private": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_suppressed": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "background_scale": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "show_element_label": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "show_link_label": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    }
+   },
+   "notes": [
+    "background_scale, show_element_label, show_link_label since 7.4. Only top-level map properties recorded (selement/link/shape/line/url sub-objects omitted)."
+   ]
+  },
+  "task": {
+   "props": {
+    "taskid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "clock": {
+     "type": "timestamp",
+     "readonly": true,
+     "since": null
+    },
+    "ttl": {
+     "type": "integer",
+     "readonly": true,
+     "since": null
+    },
+    "proxy_hostid": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "7.0"
+    },
+    "request": {
+     "type": "object",
+     "readonly": false,
+     "since": null
+    },
+    "result": {
+     "type": "object",
+     "readonly": true,
+     "since": null
+    },
+    "proxyid": {
+     "type": "ID",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "proxy_hostid listed 5.0-6.4, replaced by proxyid from 7.0. type possible values on 7.4: 1 Diagnostic information, 2 Refresh proxy configuration, 6 Execute now; task.get always returns 7 (Task execution summary). Sub-objects (request/result objects) not recorded."
+   ]
+  },
+  "sla": {
+   "props": {
+    "slaid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "6.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "period": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "slo": {
+     "type": "float",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "effective_date": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "timezone": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    }
+   },
+   "notes": [
+    "Object page does not exist on 5.0; first documented release among the checked ones is 6.0.",
+    "Introduced in 6.0; no 5.0 page."
+   ]
+  },
+  "action": {
+   "props": {
+    "actionid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "esc_period": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "eventsource": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "pause_suppressed": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "notify_if_canceled": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "pause_symptoms": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    }
+   },
+   "notes": [
+    "notify_if_canceled since 6.0; pause_symptoms since 6.4. 8.0 table identical to 7.4."
+   ]
+  },
+  "alert": {
+   "props": {
+    "alertid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "actionid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "alerttype": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "clock": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": null
+    },
+    "error": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "esc_step": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "mediatypeid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "message": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "retries": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "sendto": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "subject": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "userid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "p_eventid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "acknowledgeid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    }
+   },
+   "notes": [
+    "Property set unchanged 5.0-8.0; no property marked read-only in the doc (alert has only a get method)."
+   ]
+  },
+  "mediatype": {
+   "props": {
+    "mediatypeid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "exec_path": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "gsm_modem": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "passwd": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_email": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_helo": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_server": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_port": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_security": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_verify_host": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_verify_peer": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "smtp_authentication": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "status": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "exec_params": {
+     "type": "string",
+     "readonly": false,
+     "since": null,
+     "removed": "6.4"
+    },
+    "maxsessions": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "maxattempts": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "attempt_interval": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "content_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null,
+     "removed": "7.2"
+    },
+    "script": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "process_tags": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "show_event_menu": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "event_menu_url": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "event_menu_name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "parameters": {
+     "type": "array",
+     "readonly": false,
+     "since": null
+    },
+    "description": {
+     "type": "text",
+     "readonly": false,
+     "since": null
+    },
+    "provider": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "message_format": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "redirection_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "client_id": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "client_secret": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "authorization_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "token_url": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "tokens_status": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "access_token": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "access_token_updated": {
+     "type": "timestamp",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "access_expires_in": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.4"
+    },
+    "refresh_token": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.4"
+    }
+   },
+   "notes": [
+    "exec_params listed 5.0-6.2 (gone from 6.4); content_type listed 5.0-7.0 (gone from 7.2, replaced by message_format since 7.0); provider since 6.4; OAuth properties (redirection_url, client_id, client_secret, authorization_url, token_url, tokens_status, access_token, access_token_updated, access_expires_in, refresh_token) since 7.4. 8.0 table identical to 7.4. 6.2 page types script/description as string (text elsewhere)."
+   ]
+  },
+  "script": {
+   "props": {
+    "scriptid": {
+     "type": "ID",
+     "readonly": true,
+     "since": null
+    },
+    "command": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "name": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "confirmation": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "description": {
+     "type": "string",
+     "readonly": false,
+     "since": null
+    },
+    "execute_on": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "groupid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "host_access": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "type": {
+     "type": "integer",
+     "readonly": false,
+     "since": null
+    },
+    "usrgrpid": {
+     "type": "ID",
+     "readonly": false,
+     "since": null
+    },
+    "scope": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "menu_path": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "authtype": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "username": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "password": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "publickey": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "privatekey": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "port": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "timeout": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "parameters": {
+     "type": "array",
+     "readonly": false,
+     "since": "6.0"
+    },
+    "url": {
+     "type": "string",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "new_window": {
+     "type": "integer",
+     "readonly": false,
+     "since": "6.4"
+    },
+    "manualinput": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "manualinput_prompt": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "manualinput_validator": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "manualinput_validator_type": {
+     "type": "integer",
+     "readonly": false,
+     "since": "7.0"
+    },
+    "manualinput_default_value": {
+     "type": "string",
+     "readonly": false,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "scope, menu_path, authtype, username, password, publickey, privatekey, port, timeout, parameters since 6.0 (5.0 page lists only scriptid, command, name, confirmation, description, execute_on, groupid, host_access, type, usrgrpid); url, new_window since 6.4; manualinput* since 7.0."
+   ]
+  }
+ },
+ "sources": [
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/5.0/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/6.0/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/6.2/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/script/getscriptsbyevents",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/6.4/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/script/getscriptsbyevents",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/7.0/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/script/getscriptsbyevents",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/7.2/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/script/getscriptsbyevents",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/7.4/en/manual/api/reference/trend/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/action/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/action/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/alert/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/alert/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/dashboard/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/dashboard/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/event/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/event/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hanode/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/hanode/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/history/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/history/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/map/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/map/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/mediatype/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/mediatype/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/problem/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/problem/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/report/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/report/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/script/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/script/getscriptsbyevents",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/script/getscriptsbyhosts",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/script/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/sla/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/sla/getsli",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/sla/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/task/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/task/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/templatedashboard/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/templatedashboard/object",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/trend/get",
+  "https://www.zabbix.com/documentation/8.0/en/manual/api/reference/trend/object"
+ ],
+ "meta": {
+  "base_version": "7.4",
+  "versions_checked": [
+   "5.0",
+   "6.0",
+   "6.2",
+   "6.4",
+   "7.0",
+   "7.2",
+   "7.4",
+   "8.0"
+  ],
+  "since_rule": "first checked release whose page lists the item; null = present on 5.0",
+  "types": "type column of the 7.4 page (older pages type IDs as string)",
+  "pages_404": [
+   "5.0 report/get",
+   "5.0 report/object",
+   "5.0 templatedashboard/get",
+   "5.0 templatedashboard/object",
+   "5.0 hanode/get",
+   "5.0 hanode/object",
+   "5.0 sla/get",
+   "5.0 sla/object",
+   "5.0 sla/getsli",
+   "5.0 script/getscriptsbyevents",
+   "6.0 script/getscriptsbyevents",
+   "6.2 script/getscriptsbyevents"
+  ]
+ }
+}

@@ -439,13 +439,13 @@ _AUDITLOG_GET_EXTRA: list[ParamDef] = [
         "Return only audit log entries for actions performed by these user IDs.",
     ),
     ParamDef(
-        "time_from", "int",
-        "Return only audit log entries created after this Unix timestamp "
+        "time_from", "timestamp",
+        "Return only audit log entries created after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) "
         "(inclusive). Use for scoping queries to a specific time window.",
     ),
     ParamDef(
-        "time_till", "int",
-        "Return only audit log entries created before this Unix timestamp "
+        "time_till", "timestamp",
+        "Return only audit log entries created before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) "
         "(inclusive).",
     ),
 ]

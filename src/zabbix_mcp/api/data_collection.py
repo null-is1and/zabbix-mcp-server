@@ -113,7 +113,8 @@ _HOST_METHODS: list[MethodDef] = [
         api_method="host.massupdate",
         tool_name="host_massupdate",
         description=(
-            "Mass-update properties on multiple hosts at once. Replaces specified properties "
+            "Mass-update properties on multiple hosts at once (removed in Zabbix 8.0 - use "
+            "host_update per host there). Replaces specified properties "
             "for all listed hosts. Params must include 'hosts' (array of host IDs) and the "
             "properties to set."
         ),
@@ -183,7 +184,10 @@ _HOSTGROUP_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="hostgroup.massupdate",
         tool_name="hostgroup_massupdate",
-        description="Replace all hosts or templates in the specified host groups.",
+        description=(
+            "Replace all hosts or templates in the specified host groups. Removed in Zabbix 8.0 - "
+            "use hostgroup_update, hostgroup_massadd or hostgroup_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -271,6 +275,8 @@ _HOSTINTERFACE_METHODS: list[MethodDef] = [
         description=(
             "Replace all interfaces on a host. Any existing interfaces not present in the request "
             "will be removed. Params must include 'hostid' and 'interfaces' array."
+            " Removed in Zabbix 8.0 - use hostinterface_update, hostinterface_massadd or "
+            "hostinterface_massremove there."
         ),
         read_only=False,
         params=[
@@ -556,7 +562,10 @@ _TEMPLATE_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="template.massupdate",
         tool_name="template_massupdate",
-        description="Replace groups, hosts, or macros for multiple templates at once.",
+        description=(
+            "Replace groups, hosts, or macros for multiple templates at once. Removed in Zabbix 8.0 - "
+            "use template_update, template_massadd or template_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -621,7 +630,10 @@ _TEMPLATEGROUP_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="templategroup.massupdate",
         tool_name="templategroup_massupdate",
-        description="Replace all templates in the specified template groups.",
+        description=(
+            "Replace all templates in the specified template groups. Removed in Zabbix 8.0 - "
+            "use templategroup_update, templategroup_massadd or templategroup_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -1106,8 +1118,8 @@ _MAINTENANCE_METHODS: list[MethodDef] = [
         api_method="maintenance.create",
         tool_name="maintenance_create",
         description=(
-            "Create a new maintenance period. Requires 'name', 'active_since', 'active_till', "
-            "'timeperiods', and either 'groups' (list of {'groupid': X}) or 'hosts' (list of "
+            "Create a new maintenance period. Requires 'name', 'active_since', 'active_till' "
+            "(Unix timestamp, ISO 8601 date-time or a relative time such as now-1h), 'timeperiods', and either 'groups' (list of {'groupid': X}) or 'hosts' (list of "
             "{'hostid': X}) to define which hosts are affected. Zabbix 6.0+ replaced the legacy "
             "groupids/hostids arrays with these object lists. Symbolic names accepted for "
             "'maintenance_type': DATA_COLLECTION (with data), NO_DATA (without data)."
@@ -1156,7 +1168,10 @@ _CORRELATION_METHODS: list[MethodDef] = [
         tool_name="correlation_create",
         description=(
             "Create a new event correlation. Requires 'name', 'filter' (conditions), "
-            "and 'operations' (actions to take when conditions match)."
+            "and 'operations' (actions to take when conditions match). "
+            "filter.evaltype: 0=And/Or, 1=And, 2=Or, 3=custom expression; 'formula' and "
+            "the conditions' 'formulaid' only with evaltype 3 (the server drops them "
+            "otherwise, together with the read-only eval_formula)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -1164,7 +1179,12 @@ _CORRELATION_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="correlation.update",
         tool_name="correlation_update",
-        description="Update an existing event correlation. The 'correlationid' field is required.",
+        description=(
+            "Update an existing event correlation. The 'correlationid' field is required. "
+            "A correlation as returned by correlation_get (with selectFilter / selectOperations) "
+            "can be sent back as-is: the read-only eval_formula and, outside custom "
+            "expressions (evaltype 3), formula and formulaid are dropped before the call."
+        ),
         read_only=False,
         params=UPDATE_PARAMS,
     ),
@@ -1290,7 +1310,7 @@ _DSERVICE_METHODS: list[MethodDef] = [
             "discovered hosts (dhost) and are created by network discovery rules (drule)."
         ),
         read_only=True,
-        compact_fields=("dserviceid", "dhostid", "type", "status"),
+        compact_fields=("dserviceid", "dhostid", "dcheckid", "ip", "port", "status"),
         params=COMMON_GET_PARAMS + _DSERVICE_GET_EXTRA,
     ),
 ]

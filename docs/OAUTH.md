@@ -112,11 +112,19 @@ For production you have two equally good options:
    The same setup works behind any HTTPS-terminating reverse proxy.
    Three battle-tested snippets follow - pick the one matching your
    stack. All three forward `/mcp`, `/authorize`, `/token`, `/register`,
-   `/revoke`, `/oauth/login`, `/static/*`, and `/.well-known/*` to the
-   single MCP backend port. If you also want the admin portal exposed
-   under the same hostname, proxy a second backend on a different
-   `Location` / `location` / matcher - see "Admin portal under the
-   same hostname" below.
+   `/revoke`, `/oauth/login`, `/reports/*`, `/static/*`, and
+   `/.well-known/*` to the single MCP backend port.
+
+   > If you graft these onto an existing vhost with a *per-path*
+   > `ProxyPass` allowlist instead of the catch-all `/` below, do not
+   > forget `/reports/`. Report download links are built from
+   > `public_url`, so a missing entry there produces a link that looks
+   > right and answers 404. The MCP resource link keeps working either
+   > way; only the human-clickable URL depends on the proxy.
+
+   If you also want the admin portal exposed under the same hostname,
+   proxy a second backend on a different `Location` / `location` /
+   matcher - see "Admin portal under the same hostname" below.
 
    **Caddy** (Let's Encrypt automatic):
 
@@ -197,6 +205,49 @@ For production you have two equally good options:
    (or your proxy's IP) in `config.toml` so the OAuth login rate
    limiter and token IP allowlists honour the `X-Forwarded-For` the
    proxy injects.
+
+### Internal-only hostnames: DNS-01 instead of HTTP-01
+
+The Caddy snippet above gets its certificate through the ACME HTTP-01
+challenge, which needs port 80 on `mcp.example.com` reachable from the
+public internet. When the host is not internet-facing the challenge
+fails, Caddy keeps retrying, and no certificate ever appears. Zabbix is
+usually internal, and an MCP server next to it usually is too, so this
+is a common shape rather than an edge case.
+
+An internal CA does not get around the HTTPS requirement, and every MCP
+client would have to trust it, which is usually the harder problem.
+What remains is a publicly trusted certificate on an internal name,
+obtained with the DNS-01 challenge: the ACME server checks a TXT record
+in public DNS and never connects to the host.
+
+Stock Caddy cannot do DNS-01. The DNS provider modules are not in the
+standard binary or the official Docker image, so build one with
+`xcaddy`. Cloudflare as the worked example:
+
+```dockerfile
+FROM caddy:builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/cloudflare
+
+FROM caddy:latest
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+```
+
+```caddy
+mcp.internal.example.com {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+    }
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+`CF_API_TOKEN` is a scoped Cloudflare API token with `Zone:Zone:Read`
+and `Zone:DNS:Edit` on the zone that holds the name, not a global API
+key. The name still has to resolve for your clients, on internal DNS or
+as a public record with a private address; the ACME server only reads
+the TXT record. Modules for other providers live under
+`github.com/caddy-dns` and drop in the same way.
 
 ### Admin portal under the same hostname
 
@@ -359,12 +410,18 @@ portal already enforces elsewhere.
 | `operator` | `monitoring`, `data_collection`, `alerts`, `extensions` |
 | `viewer`   | `monitoring`, `extensions` (read-only) |
 
+Since v1.37.3 "read-only" is enforced by the server, not only implied by the cap: the role of the user who consented travels on the access and refresh tokens, and a `viewer`'s token is refused every write tool (`host_create`, `item_update`, `action_confirm`, ...) the way a `[tokens.X]` entry with `read_only = true` is. Before 1.37.3 the cap limited the scopes a viewer could grant, but `monitoring` contains write tools, so the token itself was writable.
+
 Rows outside the operator's cap render disabled with a
 "not available to your role (<role>); ask an admin" hint.
 Server-side check at consent-grant time intersects the form-posted
 scope set with the operator's cap and rejects with HTTP 403 if the
 result is empty - so a determined operator who edits the disabled
 checkbox in the DOM cannot bypass the cap.
+
+## Time zone of an OAuth client
+
+A `[tokens.X]` entry carries its own `timezone`; an OAuth-issued token has no config row, so its zone is settled at consent (since v1.38, issue #75). The portal user's `[admin.users.X].timezone` (the "Time zone" field on the user form) wins when set; otherwise the zone the operator's browser reports on the login and consent pages (`Intl.DateTimeFormat().resolvedOptions().timeZone`, posted as a hidden `browser_timezone` field, empty without JavaScript); otherwise the token carries no zone and the server falls back to the Zabbix entry's and `[server]`'s `timezone` as for any other call. The user's own zone ranks first, like a `[tokens.X]` zone; the browser-reported one is only a hint and ranks below `[zabbix.<name>].timezone` and `[server].timezone`, so an operator's pin wins over it. The zone rides on the authorization code, the access token and the refresh token next to the role, so it survives refresh-token rotation, and the `oauth.consent_granted` audit row records it. An unknown zone is dropped silently (browser) or logged and dropped (config); it never fails a login.
 
 ## Refresh-token reuse detection
 

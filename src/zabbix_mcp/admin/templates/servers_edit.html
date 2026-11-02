@@ -22,7 +22,7 @@
             <input type="hidden" name="_cfg_mtime" value="{{ config_mtime | default('') }}">
         <div class="form-group">
             <label class="form-label">Server name <span class="tooltip-icon" tabindex="0" data-tooltip="Identifier used as the `server` argument in MCP tool calls. Letters, digits, dashes, underscores. Must start with a letter. Rename rewrites token allowed_servers references automatically.">&#x1F6C8;</span></label>
-            <input type="text" name="name" id="srv-name" class="form-input" value="{{ edit_server_name }}" pattern="[a-zA-Z][a-zA-Z0-9_-]*" required
+            <input type="text" name="name" id="srv-name" class="form-input" value="{{ edit_server_name }}" pattern="[a-zA-Z][a-zA-Z0-9_\-]*" required
                    data-existing-names='{{ existing_server_names | default([]) | tojson }}'
                    data-current-name="{{ edit_server_name }}">
             <small class="text-muted">Letters, digits, dashes, underscores. Must start with a letter. Renaming also updates token <code>allowed_servers</code> references.</small>
@@ -31,10 +31,42 @@
             <label class="form-label">Zabbix URL <span class="tooltip-icon" tabindex="0" data-tooltip="Full https://host[:port]/zabbix path to the Zabbix frontend. The MCP server appends /api_jsonrpc.php for API calls.">&#x1F6C8;</span></label>
             <input type="url" name="url" id="srv-url" class="form-input" value="{{ server.url | default('') }}" required>
         </div>
+        <div class="form-group" id="srv-token-group">
+            <label class="form-label">API Token <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix API token (User settings -> API tokens in Zabbix UI). Must have permissions for the actions the AI client will perform. Leave empty here to keep the current value. Not used when Legacy auth is enabled.">&#x1F6C8;</span></label>
+            <input type="password" name="api_token" id="srv-token" class="form-input" value="" placeholder="{% if server.api_token %}Leave empty to keep current{% else %}Not configured{% endif %}" autocomplete="off">
+            <small id="srv-token-hint" class="text-muted" style="display:none; color:var(--color-danger);">&#x26A0;&#xFE0F; Not used &mdash; Legacy auth is enabled; the server signs in with the username and password below.</small>
+            <small id="srv-token-help" class="text-muted">
+                {% if server.api_token %}
+                Leave empty to keep the current token. Current: <code>{{ server.api_token[:8] }}...{{ server.api_token[-4:] }}</code>
+                {% elif server.legacy_auth %}
+                No API token &mdash; this server uses legacy password login (below).
+                {% else %}
+                Not configured. Required unless Legacy auth is enabled below.
+                {% endif %}
+            </small>
+        </div>
         <div class="form-group">
-            <label class="form-label">API Token <span class="tooltip-icon" tabindex="0" data-tooltip="Zabbix API token (User settings -> API tokens in Zabbix UI). Must have permissions for the actions the AI client will perform. Leave empty here to keep the current value.">&#x1F6C8;</span></label>
-            <input type="password" name="api_token" id="srv-token" class="form-input" value="" placeholder="Leave empty to keep current" autocomplete="off">
-            <small class="text-muted">Leave empty to keep the current token. Current: <code>{{ server.api_token[:8] }}...{{ server.api_token[-4:] }}</code></small>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                <input type="checkbox" name="legacy_auth" id="srv-legacy" onchange="_toggleLegacy('srv')" {% if server.legacy_auth %}checked{% endif %}> Legacy auth (Zabbix 5.0 / 5.2 only) <span class="tooltip-icon" tabindex="0" data-tooltip="Only for Zabbix 5.0 and 5.2, which have no API tokens. Refused against Zabbix 5.4 or newer, and refused together with an API token. Switching it off removes the stored username and password.">&#x1F6C8;</span>
+            </label>
+        </div>
+        <div id="srv-legacy-box" style="{% if not server.legacy_auth %}display:none;{% endif %} border:2px solid var(--color-danger); border-radius:var(--radius-md); background:rgba(239,68,68,0.08); padding:12px 16px; margin-bottom:12px;">
+            <div style="color:var(--color-danger); font-weight:600; margin-bottom:6px;">&#x26A0;&#xFE0F; Unsupported Zabbix version &middot; security risk</div>
+            <div class="text-sm" style="margin-bottom:10px;">
+                Zabbix 5.0 and 5.2 are <strong>out of upstream support</strong> and have no API tokens. With this enabled the MCP server stores a
+                <strong>user password</strong> instead of a revocable, scoped token. This path is best effort and outside our test matrix.
+                The fix is upgrading Zabbix; until then use a dedicated low-privilege user, keep <strong>Read-only</strong> on, and prefer
+                <code>${ENV_VAR}</code> for the password. The server refuses this login against Zabbix 5.4 or newer.
+            </div>
+            <div class="form-group">
+                <label class="form-label">Username</label>
+                <input type="text" name="username" id="srv-user" class="form-input" value="{{ server.username | default('') }}" autocomplete="off" placeholder="e.g. zabbix-mcp">
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" id="srv-pass" class="form-input" value="" placeholder="{% if server.password %}Leave empty to keep current{% else %}Not configured{% endif %}" autocomplete="new-password">
+                <small class="text-muted">{% if server.password %}Password is set and is never shown here. Leave empty to keep it; type a new value to replace it.{% else %}Not configured. Required with Legacy auth.{% endif %} <code>${ENV_VAR}</code> references are supported.</small>
+            </div>
         </div>
         <div class="form-group" style="display:flex; gap:24px;">
             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" tabindex="0" data-tooltip="When checked, MCP tools that mutate Zabbix data (host_create, item_update, ...) are blocked at the server level. Recommended for production: leave checked and grant per-token write scope only when needed.">
@@ -48,6 +80,11 @@
             <label class="form-label" for="srv-timeout">Request timeout (seconds) <span class="tooltip-icon" tabindex="0" data-tooltip="Per-call HTTP timeout. Long-running queries (large host.get / history.get / configuration.export) need higher values. Default 300 matches Zabbix PHP max_execution_time.">&#x1F6C8;</span></label>
             <input type="number" name="request_timeout" id="srv-timeout" class="form-input" min="5" max="3600" step="5" value="{{ server.request_timeout | default(300) }}" style="max-width:140px;">
             <small class="text-muted">HTTP timeout for Zabbix API calls. Default <code>300</code> matches the Zabbix PHP frontend's <code>max_execution_time</code>. Lower it for a slow WAN link you want to fail fast on; raise it for workflows that export large templates or fetch long history ranges.</small>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="srv-timezone">Time zone <span class="tooltip-icon" tabindex="0" data-tooltip="Zone for *_local timestamps and for dates sent without a zone. Empty = the Zabbix user's zone, then the frontend default, then this host. A token's own zone wins.">&#x1F6C8;</span></label>
+            <input type="text" name="timezone" id="srv-timezone" class="form-input" placeholder="Europe/London" value="{{ server.timezone | default('') }}" autocomplete="off" style="max-width:260px;">
+            <small class="text-muted">Zone for *_local timestamps and for dates sent without a zone. Empty = the Zabbix user's zone, then the frontend default, then this host. A token's own zone wins.</small>
         </div>
 
         <fieldset style="border:1px solid var(--color-border); border-radius:6px; padding:12px 16px; margin-bottom:16px;">
@@ -83,6 +120,22 @@
 </div>
 
 <script>
+    function _toggleLegacy(prefix) {
+        var on = document.getElementById(prefix + '-legacy').checked;
+        document.getElementById(prefix + '-legacy-box').style.display = on ? '' : 'none';
+        // The token is not used while legacy auth is on: grey it out and
+        // say so, instead of leaving two live-looking credential fields.
+        var tok = document.getElementById(prefix + '-token');
+        var hint = document.getElementById(prefix + '-token-hint');
+        var wrap = document.getElementById(prefix + '-token-group');
+        if (tok) { tok.disabled = on; if (on) { tok.value = ''; } }
+        if (hint) { hint.style.display = on ? '' : 'none'; }
+        var help = document.getElementById(prefix + '-token-help');
+        if (help) { help.style.display = on ? 'none' : ''; }
+        if (wrap) { wrap.style.opacity = on ? '0.5' : ''; }
+    }
+    document.addEventListener('DOMContentLoaded', function () { _toggleLegacy('srv'); });
+
 function _setTestResult(container, dotClass, text) {
     // Safe DOM construction — no innerHTML from server responses
     container.textContent = '';
@@ -113,7 +166,7 @@ function _parseTestResponse(container, responseText) {
         var ver = versionMatch ? versionMatch[1] : '';
         _setTestResult(container, 'status-dot-green', 'Connected' + (ver ? ' — Zabbix ' + ver : ''));
     } else if (yellowDot) {
-        _setTestResult(container, 'status-dot-yellow', 'API online — Token invalid or expired');
+        _setTestResult(container, 'status-dot-yellow', 'API online — Invalid credentials');
     } else if (redDot) {
         var errSpan = doc.querySelector('span[style*="color:var(--color-danger)"]');
         var msg = errSpan ? errSpan.textContent.trim() : doc.body.textContent.trim();
@@ -138,14 +191,17 @@ function _csrfHeader() {
 function testEditServer() {
     var url = document.getElementById('srv-url').value;
     var token = document.getElementById('srv-token').value;
+    var username = document.getElementById('srv-user').value;
+    var password = document.getElementById('srv-pass').value;
+    var legacy = document.getElementById('srv-legacy').checked ? '1' : '0';
     var ssl = document.getElementById('srv-ssl').checked;
     var result = document.getElementById('edit-test-result');
     _setTestResult(result, '', 'Testing...');
 
     var csrf = _csrfHeader();
 
-    // If token is empty, we can't test with a new token — test existing connection
-    if (!token) {
+    // Nothing new typed — test the existing saved connection.
+    if (!token && !username && !password) {
         fetch('/servers/{{ edit_server_name }}/test', {method: 'POST', headers: csrf})
             .then(function(r) { return r.text(); })
             .then(function(html) { _parseTestResponse(result, html); })
@@ -156,7 +212,12 @@ function testEditServer() {
     fetch('/servers/test-new', {
         method: 'POST',
         headers: Object.assign({'Content-Type': 'application/x-www-form-urlencoded'}, csrf),
-        body: 'url=' + encodeURIComponent(url) + '&api_token=' + encodeURIComponent(token) + '&verify_ssl=' + (ssl ? '1' : '0'),
+        body: 'url=' + encodeURIComponent(url)
+            + '&api_token=' + encodeURIComponent(token)
+            + '&username=' + encodeURIComponent(username)
+            + '&password=' + encodeURIComponent(password)
+            + '&legacy_auth=' + legacy
+            + '&verify_ssl=' + (ssl ? '1' : '0'),
     })
     .then(function(r) { return r.text(); })
     .then(function(html) { _parseTestResponse(result, html); })

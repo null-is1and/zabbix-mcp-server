@@ -625,6 +625,16 @@ RestrictSUIDSGID=yes
 RestrictNamespaces=yes
 ReadWritePaths=/var/log/zabbix-mcp /etc/zabbix-mcp
 
+# Report output directory for [reporting].output_dir. StateDirectory
+# creates it with the right ownership on every start AND makes it
+# writable under ProtectSystem=strict - without this the whole
+# filesystem is read-only to the service and saving a report fails
+# with EROFS no matter how the directory is owned.
+# An operator pointing output_dir somewhere else must add that path
+# here (systemctl edit zabbix-mcp-server) for the same reason.
+StateDirectory=zabbix-mcp/reports
+StateDirectoryMode=0750
+
 [Install]
 WantedBy=multi-user.target
 UNIT
@@ -1035,14 +1045,27 @@ do_update() {
                 warn "Fast-forward pull failed (diverged history or local changes)."
                 local current_branch
                 current_branch=$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-                info "Trying: git fetch + reset to origin/${current_branch}..."
-                if git -C "$SCRIPT_DIR" fetch origin 2>&1 && \
+                # --prune drops remote-tracking refs for branches deleted
+                # upstream. Without it a checkout left on a merged-and-
+                # deleted release branch keeps resetting to the last
+                # cached commit of a dead branch and the operator stays
+                # pinned to an old version with no visible error (#60).
+                git -C "$SCRIPT_DIR" fetch --prune origin 2>&1 || \
+                    warn "git fetch failed — working with cached refs."
+                if ! git -C "$SCRIPT_DIR" rev-parse --verify --quiet \
+                        "refs/remotes/origin/${current_branch}" >/dev/null; then
+                    warn "Branch '${current_branch}' no longer exists on origin (merged and deleted?)."
+                    info "Falling back to origin/main."
+                    current_branch="main"
+                fi
+                info "Trying: reset to origin/${current_branch}..."
+                if git -C "$SCRIPT_DIR" checkout "${current_branch}" 2>&1 && \
                    git -C "$SCRIPT_DIR" reset --hard "origin/${current_branch}" 2>&1; then
                     ok "Repository synced to latest origin/${current_branch}."
                     need_reexec=true
                 else
                     warn "Git sync failed — continuing with current local version."
-                    warn "To fix manually: cd $SCRIPT_DIR && git fetch origin && git reset --hard origin/${current_branch}"
+                    warn "To fix manually: cd $SCRIPT_DIR && git fetch --prune origin && git checkout main && git reset --hard origin/main"
                 fi
             fi
             # Re-exec with updated script to ensure new code runs new installer
