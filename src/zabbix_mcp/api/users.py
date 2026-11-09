@@ -116,7 +116,8 @@ _USER_METHODS: list[MethodDef] = [
             "role, groups, etc.). This is the standard way to start an API session "
             "when not using persistent API tokens."
         ),
-        read_only=True,
+        # a write: it tests a password against Zabbix (guessing, lockouts) and opens a session
+        read_only=False,
         params=[
             ParamDef(
                 "username", "str",
@@ -143,7 +144,8 @@ _USER_METHODS: list[MethodDef] = [
             "it can no longer be used for API calls. Good practice for cleanup "
             "after scripted workflows. Requires ``auth_sessionid`` to be set "
             "to the session id from a prior ``user.login`` call - the "
-            "configured server-level api_token cannot be used here because "
+            "configured server-level credentials (api_token or username/password) "
+            "cannot be used here because "
             "logging it out would break every subsequent call from this MCP."
         ),
         read_only=False,
@@ -151,8 +153,9 @@ _USER_METHODS: list[MethodDef] = [
             ParamDef(
                 "auth_sessionid", "str",
                 "Session id from a prior user.login call. The MCP wrapper "
-                "uses this for the auth field instead of the server-level "
-                "api_token, so invalidating it does not affect other tools.",
+                "uses this for the auth field instead of the configured "
+                "server credentials, so invalidating it does not affect "
+                "other tools.",
                 required=True,
             ),
         ],
@@ -164,7 +167,8 @@ _USER_METHODS: list[MethodDef] = [
             "Check whether a session is still valid. Returns the authenticated "
             "user's details if so. Requires ``auth_sessionid`` to be set to a "
             "session id (typically from a prior ``user.login``); the configured "
-            "server-level api_token cannot validate against the session table."
+            "server credentials (api_token or username/password) cannot "
+            "validate against the session table."
         ),
         read_only=True,
         params=[
@@ -179,6 +183,16 @@ _USER_METHODS: list[MethodDef] = [
                 "sessionid", "str",
                 "Session id whose validity should be checked. If omitted, "
                 "the auth_sessionid (the calling session) is checked instead.",
+            ),
+            ParamDef(
+                "token", "str",
+                "A Zabbix API token to check instead of a session id (do not "
+                "send both).",
+            ),
+            ParamDef(
+                "extend", "bool",
+                "Whether checking a session also extends its lifetime "
+                "(Zabbix default: true). Not used with 'token'.",
             ),
         ],
     ),
@@ -254,10 +268,6 @@ _USERGROUP_GET_EXTRA: list[ParamDef] = [
         "userids", "list[str]",
         "Return only user groups that contain the given user IDs.",
     ),
-    ParamDef(
-        "with_users", "bool",
-        "Return only user groups that have at least one user.",
-    ),
 ]
 
 _USERGROUP_METHODS: list[MethodDef] = [
@@ -282,7 +292,11 @@ _USERGROUP_METHODS: list[MethodDef] = [
             "Create a new user group. Required field: 'name'. Important optional "
             "fields: 'gui_access' (0=system default, 1=internal auth, 2=LDAP, "
             "3=disabled), 'users_status' (0=enabled, 1=disabled), 'hostgroup_rights' "
-            "and 'templategroup_rights' (arrays defining permissions per group)."
+            "and 'templategroup_rights' (arrays defining permissions per group). Zabbix 8.0+: "
+            "'proxies' ([{'proxyid': X}]) and 'proxy_groups' ([{'proxy_groupid': X}]) with "
+            "'proxy_mode' / 'proxy_group_mode' (0 deny list, 1 allow list), and 'apm_filters' "
+            "([{'key', 'value', 'signal_type': -1 all / 0 traces / 1 metrics / 2 logs}]) for access "
+            "to OpenTelemetry data by resource attribute."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -345,7 +359,11 @@ _USERDIRECTORY_METHODS: list[MethodDef] = [
             "for LDAP -- 'name', 'host', 'port', 'base_dn', 'search_attribute'; "
             "for SAML -- 'name', 'idp_entityid', 'sso_url', 'username_attribute', "
             "'sp_entityid'. Include 'provision_groups' to map external groups to "
-            "Zabbix user groups and roles."
+            "Zabbix user groups and roles. Zabbix 8.0 with $SSO['CERT_STORAGE'] = 'database' in the "
+            "frontend configuration (the default of a new installation) keeps the SAML certificates "
+            "in the object: 'idp_certificate' is then required, 'sp_certificate' and 'sp_private_key' "
+            "optional (PEM text, write-only; a get returns only their *_hash); with file storage "
+            "Zabbix refuses these parameters."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -380,18 +398,21 @@ _USERDIRECTORY_METHODS: list[MethodDef] = [
             "that Zabbix can connect to the directory server with the provided "
             "parameters and optionally performs a test authentication. Use this "
             "before creating or updating a directory to validate settings. "
-            "Authenticates with the configured server-level api_token by default; "
+            "Authenticates with the configured server-level credentials (api_token or "
+            "username/password) by default; "
             "set ``auth_sessionid`` to a session id from ``user.login`` if your "
             "Zabbix configuration restricts userdirectory.test to interactive "
             "sessions."
         ),
-        read_only=True,
+        # a write: Zabbix fills in the stored bind password and connects to the host the
+        # caller names, so a read-only token could have the LDAP password sent anywhere
+        read_only=False,
         params=[
             ParamDef(
                 "auth_sessionid", "str",
                 "Optional session id from a prior user.login call. When set, "
                 "the wrapper uses it for the JSON-RPC auth header instead of "
-                "the configured api_token.",
+                "the configured server credentials.",
             ),
             ParamDef(
                 "params", "dict",
@@ -500,7 +521,7 @@ _TOKEN_METHODS: list[MethodDef] = [
         description=(
             "Create a new API token. Required fields: 'name' and 'userid' (the "
             "user this token authenticates as). Optional: 'expires_at' (Unix "
-            "timestamp for expiry, 0 for no expiry), 'status' (0=enabled, "
+            "timestamp or ISO 8601 date-time for expiry, 0 for no expiry), 'status' (0=enabled, "
             "1=disabled), 'description'. After creation, call token.generate to "
             "obtain the actual authentication string."
         ),

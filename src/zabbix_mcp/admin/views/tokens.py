@@ -2,6 +2,18 @@
 # Zabbix MCP Server
 # Copyright (C) 2026 initMAX s.r.o.
 #
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
 
 """MCP Token CRUD views — create, list, edit, revoke, delete."""
 
@@ -60,17 +72,35 @@ def _safe_return_to(raw: str) -> str:
     return raw
 
 
+def _parse_timezone(raw) -> tuple[str, str | None]:
+    """Coerce the optional ``timezone`` form field (issue #75).
+
+    Returns ``(normalised_name, None)`` for a valid zone, ``("", None)``
+    for an empty field (= inherit from the Zabbix entry / [server]; the
+    key is dropped from config) and ``("", error_message)`` for a value
+    the token store would ignore with a warning at the next reload.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return "", None
+    from zabbix_mcp.timezones import validate_timezone
+    try:
+        return validate_timezone(text), None
+    except ValueError as exc:
+        return "", f"Time zone is invalid: {exc}"
+
+
 # All known tool groups
 _ALL_GROUPS = list(TOOL_GROUPS.keys())
 
 # Build tool data for templates (groups with their child tool prefixes)
 _TOOL_DATA = []
 _GROUP_DESCRIPTIONS = {
-    "monitoring": "Hosts, problems, triggers, items, events, history, trends, SLA, dashboards, maps",
+    "monitoring": "Hosts, problems, triggers, items, events, history, trends, SLA, business services, APM traces / spans / logs / metrics (8.0)",
     "data_collection": "Templates, template groups, dashboards, value maps, configuration",
     "alerts": "Actions, media types, alert history, script execution",
     "users": "Users, user groups, roles, tokens, authentication",
-    "administration": "Settings, proxies, housekeeping, audit log, connectors, modules",
+    "administration": "Settings, proxies, housekeeping, audit log, connectors, modules, API version, server info, mobile devices (8.0)",
     "extensions": "Graph render, anomaly detection, capacity forecast, PDF reports, raw API call, action approval",
 }
 for _gname, _gtools in TOOL_GROUPS.items():
@@ -171,6 +201,25 @@ def _validate_and_dedupe_ips(ip_lines: list[str]) -> tuple[list[str], str | None
     return deduped, None
 
 
+
+def _beyond_role(role: str, scopes) -> list[str]:
+    """The scopes of a token that *role* may not hand out (empty when all are within it).
+
+    An operator gets, through OAuth, monitoring / data_collection / alerts /
+    extensions at most; a static token made in the portal is held to the same, so
+    an operator cannot mint (or take over by editing or regenerating) a token for
+    the users and administration methods, or one with every scope.
+    """
+    if role == "admin":
+        return []
+    from zabbix_mcp.config import TOOL_GROUPS
+    from zabbix_mcp.oauth_login import _scope_cap_for_role
+    cap = _scope_cap_for_role(role)
+    allowed = set(cap)
+    for group in cap:
+        allowed.update(TOOL_GROUPS.get(group, []))
+    return [s for s in (scopes or ["*"]) if s not in allowed]
+
 async def token_list(request: Request) -> Response:
     admin_app = request.app.state.admin_app
     session = admin_app.require_auth(request)
@@ -223,6 +272,7 @@ async def token_create(request: Request) -> Response:
                 ctx["form_expires_at"] = src.expires_at or ""
                 ctx["form_read_only"] = bool(src.read_only)
                 ctx["form_allow_raw_json"] = bool(getattr(src, "allow_raw_json", False))
+                ctx["form_timezone"] = getattr(src, "timezone", None) or ""
                 ctx["duplicated_from_name"] = src.name
         ctx.update(_get_global_context(admin_app))
         return admin_app.render("tokens/create.html", request, ctx)
@@ -249,6 +299,7 @@ async def token_create(request: Request) -> Response:
             "form_allow_raw_json": "allow_raw_json" in form,
             "form_scopes": str(form.get("scopes", "") or ""),
             "form_allowed_servers": str(form.get("allowed_servers", "") or ""),
+            "form_timezone": str(form.get("timezone", "") or ""),
         }
         ctx.update(_get_global_context(admin_app))
         return admin_app.render("tokens/create.html", request, ctx)
@@ -275,6 +326,10 @@ async def token_create(request: Request) -> Response:
         scopes = form.getlist("scopes")
     if not scopes:
         scopes = ["*"]
+    beyond = _beyond_role(session.role, scopes)
+    if beyond:
+        return _err(f"Your role ({session.role}) cannot give a token these scopes: {', '.join(beyond)}. "
+                    "Pick narrower scopes, or ask an admin.")
 
     read_only = "read_only" in form
     allow_raw_json = "allow_raw_json" in form
@@ -324,6 +379,12 @@ async def token_create(request: Request) -> Response:
                 f"Known: {', '.join(sorted(known_servers)) or '(none)'}."
             )
 
+    # Per-client time zone (issue #75). Wins over the Zabbix entry's and
+    # [server]'s zone; empty = inherit and the key is not written.
+    timezone_name, timezone_err = _parse_timezone(form.get("timezone", ""))
+    if timezone_err:
+        return _err(timezone_err)
+
     # Generate token
     raw_token, token_hash = TokenStore.generate_token()
 
@@ -357,6 +418,8 @@ async def token_create(request: Request) -> Response:
         # stay clean and a future audit "grep allow_raw_json config.toml"
         # only finds the tokens that have actually been opted in.
         token_data["allow_raw_json"] = True
+    if timezone_name:
+        token_data["timezone"] = timezone_name
 
     try:
         add_config_table(admin_app.config_path, "tokens", token_id, token_data)
@@ -403,6 +466,12 @@ async def token_detail(request: Request) -> Response:
     if not token:
         return RedirectResponse("/tokens", status_code=303)
 
+    if request.method == "POST" and session.role != "viewer" and _beyond_role(session.role, token.scopes):
+        return admin_app.flash_redirect(
+            f"/tokens/{token_id}",
+            f"This token has scopes your role ({session.role}) cannot hand out; only an admin can change it.",
+            "danger",
+        )
     if request.method == "POST" and session.role != "viewer":
         form = await request.form()
 
@@ -448,6 +517,13 @@ async def token_detail(request: Request) -> Response:
         else:
             scopes = form.getlist("scopes")
         if scopes:
+            beyond = _beyond_role(session.role, scopes)
+            if beyond:
+                return admin_app.flash_redirect(
+                    f"/tokens/{token_id}",
+                    f"Your role ({session.role}) cannot give a token these scopes: {', '.join(beyond)}.",
+                    "danger",
+                )
             updates["scopes"] = list(scopes)
 
         read_only = "read_only" in form
@@ -509,6 +585,18 @@ async def token_detail(request: Request) -> Response:
                 )
         updates["allowed_servers"] = servers_list
 
+        # Per-client time zone (issue #75). Text field: a value is
+        # validated and written, blank clears the key (= inherit) so
+        # the file never carries `timezone = ""`.
+        timezone_name, timezone_err = _parse_timezone(form.get("timezone", ""))
+        if timezone_err:
+            return admin_app.flash_redirect(f"/tokens/{token_id}", timezone_err, "danger")
+        removals: list[str] = []
+        if timezone_name:
+            updates["timezone"] = timezone_name
+        else:
+            removals.append("timezone")
+
         try:
             # Read current, merge updates
             doc = load_config_document(admin_app.config_path)
@@ -516,7 +604,7 @@ async def token_detail(request: Request) -> Response:
             if token_id in tokens_section:
                 # Detect if any non-name field actually changed
                 current = dict(tokens_section[token_id])
-                changed_restart = False
+                changed_restart = any(k in current for k in removals)
                 for k, v in updates.items():
                     if k == "name":
                         continue
@@ -528,6 +616,8 @@ async def token_detail(request: Request) -> Response:
 
                 for k, v in updates.items():
                     tokens_section[token_id][k] = v
+                for k in removals:
+                    tokens_section[token_id].pop(k, None)
                 from zabbix_mcp.admin.config_writer import save_config_document
                 save_config_document(admin_app.config_path, doc)
                 _reload_tokens(admin_app)
@@ -563,6 +653,9 @@ async def token_revoke(request: Request) -> Response:
         return RedirectResponse("/tokens", status_code=303)
 
     token_id = request.path_params["token_id"]
+    existing = admin_app.token_store.get_token(token_id)
+    if existing is not None and _beyond_role(session.role, existing.scopes):
+        return admin_app.flash_redirect("/tokens", "Only an admin can change this token.", "danger")
     try:
         doc = load_config_document(admin_app.config_path)
         tokens_section = doc.get("tokens", {})
@@ -607,6 +700,9 @@ async def token_regenerate(request: Request) -> Response:
     token = admin_app.token_store.get_token(token_id)
     if not token:
         return admin_app.flash_redirect("/tokens", f"Token '{token_id}' not found.", "danger")
+    if _beyond_role(session.role, token.scopes):
+        # a new secret for a wider token would hand it to whoever asked
+        return admin_app.flash_redirect("/tokens", "Only an admin can regenerate this token.", "danger")
 
     raw_token, token_hash = TokenStore.generate_token()
     try:
