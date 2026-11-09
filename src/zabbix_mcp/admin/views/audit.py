@@ -2,6 +2,18 @@
 # Zabbix MCP Server
 # Copyright (C) 2026 initMAX s.r.o.
 #
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
 
 """Audit log viewer + CSV export."""
 
@@ -79,6 +91,15 @@ def _read_audit_entries(
     total = len(entries)
     return entries[offset:offset + limit], total
 
+
+
+def _csv_cell(value) -> str:
+    """A cell a spreadsheet shows as text. The audit log holds what anybody typed
+    (a user name at a failed login): "=HYPERLINK(...)" would be a live formula."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
 
 async def audit_view(request: Request) -> Response:
     admin_app = request.app.state.admin_app
@@ -172,7 +193,7 @@ async def audit_export(request: Request) -> Response:
     writer.writerow(["Timestamp", "Action", "User", "Target Type", "Target ID", "Details", "IP"])
 
     for entry in entries:
-        writer.writerow([
+        writer.writerow([_csv_cell(v) for v in (
             entry.get("timestamp", ""),
             entry.get("action", ""),
             entry.get("user", ""),
@@ -180,7 +201,7 @@ async def audit_export(request: Request) -> Response:
             entry.get("target_id", ""),
             json.dumps(entry.get("details", {})) if entry.get("details") else "",
             entry.get("ip", ""),
-        ])
+        )])
 
     output.seek(0)
     return StreamingResponse(

@@ -33,6 +33,7 @@ This module covers the "Alerts & Actions" domain of the Zabbix API:
 
 from zabbix_mcp.api.types import MethodDef, ParamDef
 from zabbix_mcp.api.common import COMMON_GET_PARAMS, CREATE_PARAMS, UPDATE_PARAMS, DELETE_PARAMS
+from zabbix_mcp.api.action_payload import FILTER_CONTRACT
 
 # ---------------------------------------------------------------------------
 # action
@@ -60,6 +61,7 @@ _ACTION_GET_EXTRA: list[ParamDef] = [
         "Return only actions with the given event source. "
         "Values: 0 = trigger events, 1 = discovery events, "
         "2 = autoregistration events, 3 = internal events, 4 = service events.",
+        api_name="filter.eventsource",
     ),
 ]
 
@@ -90,7 +92,7 @@ _ACTION_METHODS: list[MethodDef] = [
             "'recovery_operations' and 'update_operations'. Set 'status' to 0 "
             "(enabled) or 1 (disabled). "
             "Symbolic names accepted for 'eventsource': TRIGGER, DISCOVERY, "
-            "AUTOREGISTRATION, INTERNAL, SERVICE."
+            "AUTOREGISTRATION, INTERNAL, SERVICE. " + FILTER_CONTRACT
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -102,7 +104,11 @@ _ACTION_METHODS: list[MethodDef] = [
             "Update an existing action. The params dict must include 'actionid'. "
             "Any properties not specified will remain unchanged. Commonly used to "
             "enable/disable actions (set status to 0 or 1), modify conditions, "
-            "or change notification recipients."
+            "or change notification recipients. An action as returned by action_get "
+            "(with selectFilter / selectOperations / ...) can be sent back as-is: the "
+            "server drops the read-only and source-specific fields Zabbix refuses on "
+            "write (eval_formula, formulaid outside custom expressions, operationid, "
+            "empty value2, esc_period on discovery actions, ...). " + FILTER_CONTRACT
         ),
         read_only=False,
         params=UPDATE_PARAMS,
@@ -142,13 +148,13 @@ _ALERT_GET_EXTRA: list[ParamDef] = [
         "Return only alerts for the given host IDs.",
     ),
     ParamDef(
-        "time_from", "int",
-        "Return only alerts generated after this Unix timestamp (inclusive). "
+        "time_from", "timestamp",
+        "Return only alerts generated after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive). "
         "Useful for auditing recent notification delivery.",
     ),
     ParamDef(
-        "time_till", "int",
-        "Return only alerts generated before this Unix timestamp (inclusive).",
+        "time_till", "timestamp",
+        "Return only alerts generated before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
     ),
 ]
 
@@ -161,7 +167,8 @@ _ALERT_METHODS: list[MethodDef] = [
             "and remote command Zabbix has executed as a result of actions. Each "
             "alert entry contains delivery status, retry count, error text (if "
             "failed), and the message body. Use time_from/time_till to scope by "
-            "time window. Great for diagnosing 'why didn't I get notified?' issues."
+            "time window. Great for diagnosing 'why didn't I get notified?' issues. "
+            "The newest alerts come first unless a sort is given."
         ),
         read_only=True,
         compact_fields=("alertid", "actionid", "mediatypeid", "status", "clock"),
@@ -202,7 +209,8 @@ _MEDIATYPE_METHODS: list[MethodDef] = [
         description=(
             "Create a new media type (notification channel). Required fields depend "
             "on the type: 'name' and 'type' are always required. "
-            "Symbolic names accepted for 'type': EMAIL, SCRIPT, SMS, WEBHOOK. "
+            "Symbolic names accepted for 'type': EMAIL, SCRIPT, SMS, WEBHOOK, PUSH (8.0+, "
+            "notifications to the Zabbix mobile app). "
             "EMAIL needs smtp_server, smtp_email; SCRIPT needs exec_path; "
             "SMS needs gsm_modem; WEBHOOK needs script and optionally parameters. "
             "Set status to 0 (enabled) or 1 (disabled)."
@@ -332,6 +340,11 @@ _SCRIPT_METHODS: list[MethodDef] = [
                 "eventid", "str",
                 "Event context for the script.",
             ),
+            ParamDef(
+                "manualinput", "str",
+                "The value for a script that asks for manual input (its "
+                "{MANUALINPUT} macro). Zabbix 7.0+.",
+            ),
         ],
     ),
     MethodDef(
@@ -349,6 +362,14 @@ _SCRIPT_METHODS: list[MethodDef] = [
                 "eventids", "list[str]",
                 "Event IDs to get available scripts for.",
                 required=True,
+            ),
+            ParamDef(
+                "scriptid", "str",
+                "Return only this script, with its macros resolved for each event. Zabbix 7.0+.",
+            ),
+            ParamDef(
+                "manualinput", "str",
+                "Value of the {MANUALINPUT} macro to resolve in the script. Zabbix 7.0+.",
             ),
         ],
     ),
@@ -368,6 +389,14 @@ _SCRIPT_METHODS: list[MethodDef] = [
                 "hostids", "list[str]",
                 "Host IDs to get available scripts for.",
                 required=True,
+            ),
+            ParamDef(
+                "scriptid", "str",
+                "Return only this script, with its macros resolved for each host. Zabbix 7.0+.",
+            ),
+            ParamDef(
+                "manualinput", "str",
+                "Value of the {MANUALINPUT} macro to resolve in the script. Zabbix 7.0+.",
             ),
         ],
     ),

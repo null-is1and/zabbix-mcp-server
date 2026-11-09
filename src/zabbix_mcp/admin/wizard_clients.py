@@ -133,7 +133,7 @@ CLIENTS: dict[str, dict] = {
             "Verify with `claude mcp list` - `{server_key}` should appear in the list.",
             "Open a Claude Code session and ask a Zabbix question - the tools are auto-loaded.",
         ],
-        "notes": "Claude Code is the recommended client for this server: native HTTP MCP support, no HTTPS gymnastics, handles all 231 tools without issues. Requires Claude Pro / Max or Anthropic API credits.",
+        "notes": "Claude Code is the recommended client for this server: native HTTP MCP support, no HTTPS gymnastics, handles all 255 tools without issues. Requires Claude Pro / Max or Anthropic API credits.",
     },
     # =====================================================================
     # OpenAI

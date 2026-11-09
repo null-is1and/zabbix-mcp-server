@@ -28,6 +28,7 @@ import jinja2
 from zabbix_mcp import __version__
 from zabbix_mcp.admin.audit_writer import write_audit
 from zabbix_mcp.admin.auth import SessionManager, LoginRateLimiter
+from zabbix_mcp.config import FORWARDED_BY, ignored_forwarded_warner, resolve_forwarded, trusted_proxy_matcher
 
 if TYPE_CHECKING:
     from zabbix_mcp.config import AppConfig
@@ -41,29 +42,54 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _peer_ip(scope: dict) -> str:
-    """Best-effort client IP from ASGI scope.
+    """The client address of a request, for the POST rate limit.
 
-    Respects an optional trusted-proxy list configured via the app state
-    (set in AdminApp._build_app). When the direct peer is in the trusted
-    list, read the first IP from X-Forwarded-For; otherwise use the raw
-    TCP peer. Never trust XFF from arbitrary peers - that would let any
-    client claim any IP.
+    The portal's outermost layer (``_ForwardedMiddleware``) has already put
+    the address a trusted proxy reports into the scope. A scope that did not
+    pass through it is resolved here the same way: for a peer in
+    ``[server].trusted_proxies`` the right-most ``X-Forwarded-For`` entry
+    that is not a trusted proxy, for anybody else the TCP peer. Never the
+    entries a client can put in front of the proxy's own - that would let
+    any client claim any IP.
     """
-    client = scope.get("client") or ("", 0)
-    raw = client[0] or "unknown"
-    admin_app = scope.get("app") and getattr(scope["app"], "state", None)
-    trusted = set()
-    if admin_app is not None:
-        adm = getattr(admin_app, "admin_app", None)
+    if scope.get(FORWARDED_BY) is None:
+        admin_state = scope.get("app") and getattr(scope["app"], "state", None)
+        adm = getattr(admin_state, "admin_app", None) if admin_state is not None else None
         if adm is not None:
-            trusted = set(getattr(adm, "trusted_proxies", []) or [])
-    if trusted and raw in trusted:
-        headers = dict(scope.get("headers", []))
-        xff = headers.get(b"x-forwarded-for", b"").decode()
-        if xff:
-            # First entry in XFF is the original client (others are hops).
-            return xff.split(",")[0].strip() or raw
-    return raw
+            # addresses and networks, as on the MCP endpoint: string equality
+            # never matched "10.0.0.0/24", so every user behind such a proxy
+            # shared the proxy's rate-limit bucket
+            is_trusted = getattr(adm, "is_trusted_proxy", None)
+            if is_trusted is None:
+                is_trusted = trusted_proxy_matcher(getattr(adm, "trusted_proxies", []) or [], warn=False)
+            scope = resolve_forwarded(scope, is_trusted)
+    client = scope.get("client") or ("", 0)
+    return client[0] or "unknown"
+
+
+class _ForwardedMiddleware:
+    """Outermost layer of the portal: who the client is and which scheme it used.
+
+    For a request through a proxy in ``[server].trusted_proxies`` the scope
+    carries the client and the scheme that proxy reports
+    (``config.resolve_forwarded``), so the login limit, the audit log, the
+    session and the ``Secure`` flag of the cookie all go by the same values
+    as the MCP endpoint. From anybody else ``X-Forwarded-*`` is not read:
+    uvicorn runs without its own proxy handling, which believed every
+    loopback peer whether it was listed or not.
+    """
+
+    def __init__(self, app, is_trusted) -> None:
+        self.app = app
+        self.state = app.state
+        self._is_trusted = is_trusted
+        self._note_ignored = ignored_forwarded_warner(is_trusted)
+
+    async def __call__(self, scope, receive, send):
+        resolved = resolve_forwarded(scope, self._is_trusted)
+        if resolved.get(FORWARDED_BY) is None:
+            self._note_ignored(scope)          # a local or private peer whose headers were not believed
+        await self.app(resolved, receive, send)
 
 
 class _PostRateLimitMiddleware:
@@ -116,6 +142,11 @@ class _PostRateLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+# No plugins, no <base> pointing elsewhere, not framed by another site.
+# (Scripts stay inline in the templates for now.)
+_PORTAL_CSP = b"object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+
+
 class _SecurityHeadersMiddleware:
     """ASGI middleware that adds the standard hardening headers to
     every response. Cheap defense-in-depth on top of the existing
@@ -165,6 +196,9 @@ class _SecurityHeadersMiddleware:
                     add.append((b"x-frame-options", b"DENY"))
                 if b"referrer-policy" not in seen:
                     add.append((b"referrer-policy", b"same-origin"))
+                if b"content-security-policy" not in seen:
+                    # what holds for every page; the template previews set a stricter one
+                    add.append((b"content-security-policy", _PORTAL_CSP))
                 if self.tls_enabled and b"strict-transport-security" not in seen:
                     # 6 months, no preload / subdomains - safe default
                     # for self-hosted deployments behind their own DNS.
@@ -209,13 +243,20 @@ class _CsrfMiddleware:
         # Extract session cookie + its CSRF token (if authenticated)
         admin_app = self.state.admin_app if hasattr(self.state, "admin_app") else None
         headers = dict(scope.get("headers", []))
-        cookie = headers.get(b"cookie", b"").decode()
-        session_token = ""
-        for part in cookie.split(";"):
-            k, _, v = part.strip().partition("=")
-            if k == "admin_session":
-                session_token = v
-                break
+        cookie = b"; ".join(v for k, v in scope.get("headers", []) if k == b"cookie").decode("latin-1")
+        # The handlers read the cookie as Starlette does (the last of a name wins); this
+        # check must judge the same session. Two admin_session cookies are refused: one
+        # planted from a sibling subdomain in front of the real one passed this check
+        # unchecked while the handler acted on the real session.
+        from starlette.requests import cookie_parser
+        sent = [part.strip().partition("=")[0].strip() for part in cookie.split(";")]
+        if sent.count("admin_session") > 1:
+            await send({"type": "http.response.start", "status": 403,
+                        "headers": [(b"content-type", b"text/plain; charset=utf-8")]})
+            await send({"type": "http.response.body",
+                        "body": b"More than one admin_session cookie; clear the cookies of this site and log in again."})
+            return
+        session_token = cookie_parser(cookie).get("admin_session", "")
 
         session = None
         if admin_app is not None and session_token:
@@ -292,6 +333,24 @@ class _CsrfMiddleware:
         await self.app(scope, receive, send)
 
 
+# Handle to the running AdminApp, set in AdminApp.__init__. Lets code
+# outside the admin package (the OAuth client persister in server.py)
+# refresh the restart-drift baseline after a runtime config write that
+# does not actually require a restart. None when the admin portal is
+# disabled - callers treat that as a no-op.
+_LIVE_ADMIN_APP: "AdminApp | None" = None
+
+
+def refresh_config_baseline() -> None:
+    """Re-snapshot config.toml as the new 'no restart needed' baseline.
+
+    No-op when the admin portal is not running. See issue #69.
+    """
+    app = _LIVE_ADMIN_APP
+    if app is not None:
+        app._snapshot_config()
+
+
 class AdminApp:
     """Admin portal application.
 
@@ -325,10 +384,12 @@ class AdminApp:
         self.rate_limiter = LoginRateLimiter()
         self._flash_signing_key = secrets.token_bytes(32)
 
-        # Trusted reverse proxies from config; X-Forwarded-For is only
-        # honored when the direct peer is in this list.
+        # Trusted reverse proxies from config; X-Forwarded-* is only
+        # honored when the direct peer is in this list (_ForwardedMiddleware).
         trusted_cfg = getattr(config.server, "trusted_proxies", None) or []
         self.trusted_proxies = list(trusted_cfg)
+        # the MCP endpoint logs an entry that is not an address or a network
+        self.is_trusted_proxy = trusted_proxy_matcher(self.trusted_proxies, warn=False)
 
         # Track whether config changed and restart is needed.
         # Snapshot the serialized TOML at MCP startup so we can later
@@ -339,17 +400,12 @@ class AdminApp:
         # do that").
         self.restart_needed = False
         self._initial_config_dump: str | None = None
-        self._config_dump_mtime: float | None = None
-        try:
-            from zabbix_mcp.admin.config_writer import (
-                load_config_document, TOMLKIT_AVAILABLE,
-            )
-            if TOMLKIT_AVAILABLE:
-                import tomlkit as _tomlkit
-                doc = load_config_document(self.config_path)
-                self._initial_config_dump = _tomlkit.dumps(doc)
-        except Exception:
-            pass
+        self._snapshot_config()
+        # Expose the live instance so runtime config writers that do NOT
+        # need a restart (OAuth dynamic client registration) can refresh
+        # the baseline instead of tripping the drift detector - issue #69.
+        global _LIVE_ADMIN_APP
+        _LIVE_ADMIN_APP = self
         self.start_time = datetime.now()
 
         # Jinja2 environment
@@ -380,32 +436,49 @@ class AdminApp:
         except Exception as exc:
             logger.debug("Update checker not started: %s", exc)
 
+    def _snapshot_config(self) -> None:
+        """Record the current config.toml as the 'nothing pending' baseline.
+
+        Called at startup, and again after a runtime write that the
+        running process has already absorbed (issue #69: dynamic OAuth
+        client registration appends an ``[oauth_clients.<id>]`` section
+        so the client survives the next boot - the provider already
+        holds it in memory, so demanding a restart is a false alarm).
+        """
+        try:
+            from zabbix_mcp.admin.config_writer import (
+                load_config_document, TOMLKIT_AVAILABLE,
+            )
+            if not TOMLKIT_AVAILABLE:
+                return
+            import tomlkit as _tomlkit
+            self._initial_config_dump = _tomlkit.dumps(
+                load_config_document(self.config_path))
+            self.restart_needed = False
+        except Exception:
+            # Never let snapshotting break startup or a registration.
+            pass
+
     def _compute_restart_needed(self) -> bool:
         """Check if the on-disk config differs from the running snapshot.
 
-        Cheap because we read mtime first and only re-parse the TOML
-        when the file actually changed since the last check. Returns
-        the bool that base.html uses to decide whether to show the
-        "Restart needed" banner. When the operator reverts a change
-        and the disk version equals the running snapshot, the banner
-        clears automatically without needing the in-memory flag - so
-        Bug 17 ("flag stays sticky after revert") goes away.
+        Compares the file's *content* on every call. An earlier version
+        short-circuited on ``st_mtime`` equality to save the parse, which
+        opened a real gap (#80): on ext4 mtime moves in scheduler ticks,
+        so an edit landing in the same tick as the snapshot - the window
+        right after a start - was never noticed, and the tests only ever
+        saw it as flakiness on Linux. config.toml is a few kilobytes;
+        reading and dumping it per page render is not worth a cache that
+        depends on filesystem timestamp granularity.
+
+        Returns the bool that base.html uses for the "Restart needed"
+        banner. When the operator reverts a change and the disk version
+        equals the running snapshot, the banner clears on its own.
         """
         if self._initial_config_dump is None:
-            # Fall back to the in-memory flag when we could not
-            # snapshot at startup (e.g. tomlkit missing).
+            # Could not snapshot at startup (e.g. tomlkit missing) - the
+            # explicit flag set by the save handlers is all we have.
             return self.restart_needed
-        try:
-            from os import stat as _stat
-            mtime = _stat(self.config_path).st_mtime
-        except Exception:
-            return self.restart_needed
-        if mtime == self._config_dump_mtime:
-            # File unchanged since last check; reuse last result by
-            # falling through to the explicit flag.
-            return self.restart_needed
-        # File changed - re-parse and compare.
-        self._config_dump_mtime = mtime
         try:
             from zabbix_mcp.admin.config_writer import load_config_document
             import tomlkit as _tomlkit
@@ -413,8 +486,6 @@ class AdminApp:
         except Exception:
             return self.restart_needed
         differs = current != self._initial_config_dump
-        # Cache the result back on the explicit flag too so subsequent
-        # renders skip the I/O until the next mtime change.
         self.restart_needed = differs
         return differs
 
@@ -507,7 +578,9 @@ class AdminApp:
         tls_on = bool(getattr(self.config.server, "tls_cert_file", None))
         csrf_app = _CsrfMiddleware(app)
         rate_app = _PostRateLimitMiddleware(csrf_app)
-        return _SecurityHeadersMiddleware(rate_app, tls_enabled=tls_on)
+        headers_app = _SecurityHeadersMiddleware(rate_app, tls_enabled=tls_on)
+        #   4. outermost: the client and the scheme a trusted proxy reports
+        return _ForwardedMiddleware(headers_app, self.is_trusted_proxy)
 
     def render(self, template_name: str, request: Request, context: dict | None = None, status_code: int = 200) -> HTMLResponse:
         """Render a Jinja2 template with common context."""
@@ -580,11 +653,25 @@ class AdminApp:
         return response
 
     def _get_session(self, request: Request):
-        """Extract and validate session from cookie."""
+        """Extract and validate session from cookie.
+
+        The session is checked against config.toml on every request: a user that was
+        deleted, given another role, or whose password was changed is logged out at
+        once. Before, the session lived on for its 8 hours with the role it was
+        created with (a deleted admin could create a new admin).
+        """
         token = request.cookies.get("admin_session")
         if not token:
             return None
-        return self.sessions.validate_session(token)
+        session = self.sessions.validate_session(token)
+        if session is None:
+            return None
+        from zabbix_mcp.admin.auth import user_still_valid
+        if not user_still_valid(self.config_path, session.user, session.role, session.password_fingerprint or None):
+            self.sessions.destroy_session(token)
+            logger.info("Session of '%s' ended: the user was deleted or changed", session.user)
+            return None
+        return session
 
     def require_auth(self, request: Request):
         """Check auth, return session or raise redirect."""
@@ -641,9 +728,18 @@ class AdminApp:
                 if result.get("token_ok"):
                     results[name] = {"status": "online", "version": version}
                 else:
-                    results[name] = {"status": "token_error", "version": version, "error": "API online but token invalid or expired"}
+                    results[name] = {"status": "token_error", "version": version, "error": "API online but authentication failed (invalid token or credentials)"}
             except Exception as e:
                 results[name] = {"status": "error", "error": str(e)[:100]}
+        # Sections skipped at config load: report the validation error
+        # instead of leaving the dashboard to guess "not configured".
+        # A restart cannot load these - the config has to be fixed
+        # first (issue #61).
+        try:
+            for name, reason in self.client_manager.skipped_servers.items():
+                results[name] = {"status": "config_error", "error": reason[:300]}
+        except Exception:
+            pass
         return JSONResponse(results)
 
     async def _check_updates(self, request: Request) -> Response:
@@ -704,7 +800,8 @@ class AdminApp:
                     pass
 
         user_data = admin_users.get(username)
-        if not user_data or not verify_password(password, user_data.get("password_hash", "")):
+        from zabbix_mcp.admin.auth import verify_password_timed
+        if not verify_password_timed(password, (user_data or {}).get("password_hash") or None) or not user_data:
             self.rate_limiter.record_attempt(client_ip)
             logger.warning("Failed login attempt for user '%s' from %s", username, client_ip)
             write_audit("login_failure", user=username, ip=client_ip)
@@ -722,7 +819,9 @@ class AdminApp:
 
         self.rate_limiter.reset(client_ip)
         role = user_data.get("role", "viewer")
-        session_token = self.sessions.create_session(username, role, client_ip)
+        from zabbix_mcp.admin.auth import password_fingerprint
+        session_token = self.sessions.create_session(
+            username, role, client_ip, password_fingerprint(user_data.get("password_hash", "")))
         logger.info("Admin login: user '%s' from %s (role: %s)", username, client_ip, role)
         write_audit("login_success", user=username, details={"role": role}, ip=client_ip)
 

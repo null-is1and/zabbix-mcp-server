@@ -181,6 +181,7 @@ _REPORT_GET = MethodDef(
         ParamDef(
             "dashboardids", "list[str]",
             "Return only reports associated with the given dashboard IDs.",
+            api_name="filter.dashboardid",
         ),
     ],
 )
@@ -254,10 +255,20 @@ _HISTORY_GET = MethodDef(
         "every collected value and is the most granular data source in Zabbix. "
         "Always specify the 'history' parameter to select the correct data type "
         "(0=numeric float, 1=character/string, 2=log, 3=numeric unsigned, "
-        "4=text). Use 'time_from' and 'time_till' (Unix timestamps) to bound "
+        "4=text, 5=binary on 7.0+, 6=JSON on 8.0+; Zabbix assumes 3 when omitted). "
+        "Use 'time_from' and 'time_till' (Unix timestamp, ISO 8601 or a relative time such as now-1h) to bound "
         "the time range. Combine with 'itemids' or 'hostids' to target specific "
         "metrics. For long time ranges, consider using trend.get instead as it "
-        "returns aggregated min/avg/max values and is more efficient."
+        "returns aggregated min/avg/max values and is more efficient. "
+        "With 'itemids' the newest values come first unless a sort is given, so "
+        "'limit' keeps the latest ones. "
+        "Identifiers come first: an item ID cannot be derived from a host name or "
+        "a metric name, it has to be looked up. Resolve it with item_get (hostids "
+        "or a host filter plus search on key_ or name; output itemid, name, key_, "
+        "value_type, units), then pass the IDs as 'itemids' and the item's "
+        "value_type as 'history'. For one item known by host name and key, "
+        "item_history_summary_get does the lookup itself and returns the values "
+        "with min / avg / max in one call."
     ),
     read_only=True,
     params=COMMON_GET_PARAMS + [
@@ -267,21 +278,24 @@ _HISTORY_GET = MethodDef(
         ),
         ParamDef(
             "itemids", "list[str]",
-            "Return only history for the given item IDs.",
+            "Return only history for the given item IDs (from item_get; never guessed). "
+            "Needed for a scoped answer: without itemids or hostids the call returns "
+            "the values of every item of the selected type.",
         ),
         ParamDef(
             "history", "int",
-            "History data type to retrieve: 0=numeric float (default), "
-            "1=character/string, 2=log, 3=numeric unsigned, 4=text. "
-            "Must match the item's type of information.",
+            "History data type to retrieve: 0=numeric float, 1=character/string, "
+            "2=log, 3=numeric unsigned (Zabbix default when omitted), 4=text, "
+            "5=binary (7.0+), 6=JSON (8.0+). Must match the item's value_type, "
+            "otherwise the result is empty.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only data collected after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only data collected after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only data collected before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only data collected before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
     ],
 )
@@ -312,7 +326,7 @@ _HISTORY_PUSH = MethodDef(
     description=(
         "Push historical data directly into Zabbix. This allows external systems "
         "to inject metric values. Each entry must include 'itemid', 'clock' "
-        "(Unix timestamp), 'ns' (nanoseconds), and 'value'. The item must exist "
+        "(Unix timestamp, ISO 8601 date-time or a relative time such as now-1h), 'ns' (nanoseconds), and 'value'. The item must exist "
         "and be of type 'Zabbix trapper' or 'Dependent item'."
     ),
     read_only=False,
@@ -320,7 +334,7 @@ _HISTORY_PUSH = MethodDef(
         ParamDef(
             "items", "list",
             "Array of history objects to push. Each object must have: "
-            "'itemid' (str), 'clock' (int, Unix timestamp), 'ns' (int, nanoseconds), "
+            "'itemid' (str), 'clock' (Unix timestamp, ISO 8601 date-time or a relative time such as now-1h), 'ns' (int, nanoseconds), "
             "'value' (str). Example: [{\"itemid\": \"12345\", \"clock\": 1609459200, "
             "\"ns\": 0, \"value\": \"42.5\"}]",
             required=True,
@@ -343,21 +357,26 @@ _TREND_GET = MethodDef(
         "minimum, average, and maximum values as well as the number of values "
         "collected. Use trends instead of history for time ranges spanning days "
         "or more to reduce data volume. Filter by 'itemids' and use 'time_from' "
-        "/ 'time_till' to bound the time range."
+        "/ 'time_till' to bound the time range. The item IDs have to be looked up "
+        "first with item_get (output itemid, name, key_, value_type, units); only "
+        "numeric items (value_type 0 or 3) have trends. trend.get cannot sort: "
+        "the hours come oldest first, so a 'limit' keeps the start of the period; "
+        "bound the period with 'time_from' / 'time_till' instead."
     ),
     read_only=True,
     params=COMMON_GET_PARAMS + [
         ParamDef(
             "itemids", "list[str]",
-            "Return only trend data for the given item IDs.",
+            "Return only trend data for the given item IDs (from item_get; never guessed). "
+            "Needed for a scoped answer: without them the call returns trends of every item.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only trend data after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only trend data after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only trend data before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only trend data before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
     ],
 )
@@ -377,7 +396,9 @@ _EVENT_GET = MethodDef(
         "events, or when you need to correlate PROBLEM and OK events. "
         "Filter by 'source' (0=trigger, 1=discovery, 2=autoregistration, "
         "3=internal) and 'object' to narrow results. Use 'time_from'/'time_till' "
-        "for time-bounded queries and 'severity_min' to filter by importance."
+        "for time-bounded queries and 'severity_min' to filter by importance. "
+        "The newest events come first unless a sort is given, so 'limit' keeps "
+        "the latest ones."
     ),
     read_only=True,
     compact_fields=("eventid", "name", "severity", "clock", "value", "r_eventid"),
@@ -411,12 +432,12 @@ _EVENT_GET = MethodDef(
             "5=LLD rule.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only events generated after this Unix timestamp (inclusive).",
+            "time_from", "timestamp",
+            "Return only events generated after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only events generated before this Unix timestamp (inclusive).",
+            "time_till", "timestamp",
+            "Return only events generated before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call) (inclusive).",
         ),
         ParamDef(
             "value", "int",
@@ -444,9 +465,17 @@ _EVENT_ACKNOWLEDGE = MethodDef(
         "is the primary method for responding to alerts in Zabbix. The 'action' "
         "parameter is a bitmask controlling what happens: 1=close problem, "
         "2=acknowledge, 4=add message, 8=change severity, 16=unacknowledge, "
-        "32=suppress, 64=unsuppress, 128=change event rank to cause/symptom. "
-        "Combine values to perform multiple actions at once, e.g. action=6 "
-        "means acknowledge + add message."
+        "32=suppress (6.2+, with 'suppress_until'), 64=unsuppress (6.2+), "
+        "128=make the event a cause (6.4+), 256=make the event a symptom of "
+        "another event (6.4+, with 'cause_eventid'). Combine values to perform "
+        "multiple actions at once, e.g. action=6 means acknowledge + add "
+        "message. Pairs that exclude each other are refused by Zabbix: 2 with "
+        "16, 32 with 64, 128 with 256, and 1 with 32 or 64. Closing, "
+        "suppressing and rank changes are carried out by the Zabbix server a "
+        "few seconds after the call, and a part that changes nothing at that "
+        "moment (unsuppress of a problem that is not suppressed, 128 on an "
+        "event that is already a cause) is skipped without an error: read the "
+        "problem back before the next step that depends on it."
     ),
     read_only=False,
     params=[
@@ -459,8 +488,9 @@ _EVENT_ACKNOWLEDGE = MethodDef(
             "action", "int",
             "Acknowledge action bitmask: 1=close problem, 2=acknowledge, "
             "4=add message, 8=change severity, 16=unacknowledge, 32=suppress, "
-            "64=unsuppress, 128=change event rank. Combine values for multiple "
-            "actions (e.g. 6 = acknowledge + add message).",
+            "64=unsuppress, 128=change rank to cause, 256=change rank to "
+            "symptom. Combine values for multiple actions (e.g. 6 = "
+            "acknowledge + add message).",
             required=True,
         ),
         ParamDef(
@@ -473,6 +503,16 @@ _EVENT_ACKNOWLEDGE = MethodDef(
             "New trigger severity: 0=not classified, 1=information, 2=warning, "
             "3=average, 4=high, 5=disaster. Used when action includes "
             "8 (change severity).",
+        ),
+        ParamDef(
+            "suppress_until", "timestamp",
+            "Until when the event stays suppressed (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now+2h or now/d; a value without a zone is read in the zone resolved for the call); 0 suppresses it "
+            "indefinitely. Used when action includes 32 (suppress). Zabbix 6.2+.",
+        ),
+        ParamDef(
+            "cause_eventid", "str",
+            "ID of the cause event the given events become symptoms of. Required "
+            "when action includes 256 (change rank to symptom). Zabbix 6.4+.",
         ),
     ],
 )
@@ -498,7 +538,8 @@ _PROBLEM_GET = MethodDef(
         "for a script, a bulk audit of every problem (including stale "
         "ones), or filters problem_active_get does not expose "
         "('acknowledged', 'suppressed', 'recent', 'time_from', 'time_till'). "
-        "For historical events (including resolved), use event.get instead."
+        "For historical events (including resolved), use event.get instead. "
+        "The newest problems come first unless a sort is given."
     ),
     read_only=True,
     # objectid is needed by problem_get(monitored=True) post-filter to
@@ -532,12 +573,12 @@ _PROBLEM_GET = MethodDef(
             "2=discovered service, 3=autoregistration, 4=item, 5=LLD rule.",
         ),
         ParamDef(
-            "time_from", "int",
-            "Return only problems created after this Unix timestamp.",
+            "time_from", "timestamp",
+            "Return only problems created after this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call).",
         ),
         ParamDef(
-            "time_till", "int",
-            "Return only problems created before this Unix timestamp.",
+            "time_till", "timestamp",
+            "Return only problems created before this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call).",
         ),
         ParamDef(
             "acknowledged", "bool",
@@ -551,13 +592,16 @@ _PROBLEM_GET = MethodDef(
         ),
         ParamDef(
             "suppressed", "bool",
-            "Filter by suppression state. Suppressed problems are silenced "
-            "during maintenance windows or by manual suppression.",
+            "Filter by suppression state: true = only suppressed problems "
+            "(silenced by a maintenance window or by hand), false = only "
+            "problems that are not suppressed. Omit it for both.",
         ),
         ParamDef(
             "recent", "bool",
-            "Return only recently created problems (within the last 30 "
-            "minutes). Useful for detecting new issues quickly.",
+            "true = also return problems that were resolved a moment ago "
+            "(for as long as 'Display OK triggers for' in the Zabbix settings "
+            "says); false or omitted = unresolved problems only. It is not a "
+            "filter for new problems: use time_from for that.",
         ),
         ParamDef(
             "evaltype", "int",
@@ -648,18 +692,14 @@ _TASK_GET = MethodDef(
     read_only=True,
     compact_fields=("taskid", "type", "status"),
     # task.get does not accept search/filter/limit/sortfield - it filters
-    # only by ``taskids`` / ``proxyids``. Sending the COMMON_GET_PARAMS
-    # surface returns ``Invalid parameter "/": unexpected parameter
-    # "limit"`` from Zabbix 6.0+.
+    # only by ``taskids``. Anything else, the ``proxyids`` this tool used to
+    # offer included, returns ``Invalid parameter "/": unexpected parameter``
+    # on every release from 6.0 to 8.0.
     params=[
         ParamDef("output", "str", "Fields to return ('extend' for all)."),
         ParamDef(
             "taskids", "list[str]",
             "Return only tasks with the given IDs.",
-        ),
-        ParamDef(
-            "proxyids", "list[str]",
-            "Return only tasks created on the given proxies.",
         ),
         ParamDef(
             "extra_params", "dict",
@@ -761,7 +801,7 @@ _SLA_GETSLI = MethodDef(
         "availability percentages for services covered by an SLA. Returns "
         "period-by-period SLI values showing whether the SLO target was met. "
         "Required: 'slaid'. Optionally filter by 'serviceids' and time range "
-        "with 'period_from'/'period_to'."
+        "with 'period_from'/'period_to', or ask for a number of 'periods'."
     ),
     read_only=True,
     params=[
@@ -775,14 +815,94 @@ _SLA_GETSLI = MethodDef(
             "Return SLI data only for these service IDs.",
         ),
         ParamDef(
-            "period_from", "int",
-            "Return SLI data starting from this Unix timestamp.",
+            "period_from", "timestamp",
+            "Return SLI data starting from this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call).",
         ),
         ParamDef(
-            "period_to", "int",
-            "Return SLI data up to this Unix timestamp.",
+            "period_to", "timestamp",
+            "Return SLI data up to this time (Unix timestamp, ISO 8601 date-time such as 2026-04-01T08:00:00Z, or a relative time such as now-1h, now/d or now-7d/d; a value without a zone is read in the zone resolved for the call).",
+        ),
+        ParamDef(
+            "periods", "int",
+            "Preferred number of periods to return (1 to 100). With one of "
+            "period_from / period_to it counts from that end; with neither, the "
+            "most recent periods are returned.",
         ),
     ],
+)
+
+# ---------------------------------------------------------------------------
+# Service (business services; rewritten in Zabbix 6.0)
+# ---------------------------------------------------------------------------
+
+_SERVICE_GET = MethodDef(
+    api_method="service.get",
+    tool_name="service_get",
+    description=(
+        "Retrieve business services: the service tree whose status is computed from "
+        "problems matched by problem tags and propagated along parent / child links "
+        "(algorithm, weight, propagation_rule), with SLAs attached via service tags. "
+        "Filter by serviceids, parentids (deep_parentids=true for the whole subtree), "
+        "childids, tags, problem_tags or slaids. Use selectParents, selectChildren, "
+        "selectTags, selectProblemTags, selectProblemEvents, selectStatusRules and "
+        "selectStatusTimeline in extra_params to include related data. Before Zabbix 6.0 "
+        "services were trigger-based (triggerid, goodsla, showsla) and the SLA lived here; "
+        "since 6.0 the SLA is sla_get / sla_getsli."
+    ),
+    read_only=True,
+    compact_fields=("serviceid", "name", "status", "algorithm", "sortorder"),
+    params=COMMON_GET_PARAMS + [
+        ParamDef("serviceids", "list[str]", "Return only services with the given IDs."),
+        ParamDef("parentids", "list[str]", "Return only children of the given services (direct, or the whole subtree with deep_parentids)."),
+        ParamDef("deep_parentids", "bool", "With parentids: return every descendant, not only direct children (6.0+)."),
+        ParamDef("childids", "list[str]", "Return only parents of the given services."),
+        ParamDef("slaids", "list[str]", "Return only services covered by the given SLAs (6.0+)."),
+        ParamDef("tags", "list", "Return only services with the given tags: [{'tag': ..., 'value': ..., 'operator': ...}] (6.0+)."),
+        ParamDef("problem_tags", "list", "Return only services whose problem tags match: [{'tag': ..., 'value': ..., 'operator': ...}] (6.0+)."),
+        ParamDef("without_problem_tags", "bool", "Return only services that have no problem tags (6.0+)."),
+        ParamDef("evaltype", "int", "How tag conditions combine: 0 = And/Or (default), 2 = Or (6.0+)."),
+    ],
+)
+
+_SERVICE_CREATE = MethodDef(
+    api_method="service.create",
+    tool_name="service_create",
+    description=(
+        "Create a business service. Required: 'name', 'algorithm' (status calculation: "
+        "0 = set status to OK, 1 = most critical of child services, 2 = most critical if all "
+        "children have problems), 'sortorder' (0-999). Optional: 'weight', 'propagation_rule' "
+        "and 'propagation_value', 'description', 'parents' / 'children' ([{'serviceid': X}]), "
+        "'tags' (service tags SLAs match on), 'problem_tags' (which problems affect this "
+        "service), 'status_rules'. Before 6.0 the required fields were name, algorithm, "
+        "showsla, goodsla and sortorder with an optional triggerid."
+    ),
+    read_only=False,
+    params=[
+        ParamDef(
+            "params", "dict",
+            "Service definition as a JSON dictionary. Required: name, algorithm, sortorder.",
+            required=True,
+        ),
+    ],
+)
+
+_SERVICE_UPDATE = MethodDef(
+    api_method="service.update",
+    tool_name="service_update",
+    description=(
+        "Update a business service. The 'serviceid' field is required; 'parents', 'children', "
+        "'tags', 'problem_tags' and 'status_rules' replace the whole list when given."
+    ),
+    read_only=False,
+    params=UPDATE_PARAMS,
+)
+
+_SERVICE_DELETE = MethodDef(
+    api_method="service.delete",
+    tool_name="service_delete",
+    description="Delete business services by their IDs. Child services are kept and detached.",
+    read_only=False,
+    params=DELETE_PARAMS,
 )
 
 # ---------------------------------------------------------------------------
@@ -832,4 +952,9 @@ MONITORING_METHODS: list[MethodDef] = [
     _SLA_UPDATE,
     _SLA_DELETE,
     _SLA_GETSLI,
+    # Service
+    _SERVICE_GET,
+    _SERVICE_CREATE,
+    _SERVICE_UPDATE,
+    _SERVICE_DELETE,
 ]

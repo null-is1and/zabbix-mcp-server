@@ -1,0 +1,247 @@
+{
+ "methods": {
+  "ceprule.get": {
+   "object": "ceprule",
+   "sortfield": [
+    "cep_ruleid",
+    "name",
+    "stop",
+    "sortorder",
+    "status"
+   ],
+   "sortfield_versions": {
+    "cep_ruleid": {
+     "since": "8.0"
+    },
+    "name": {
+     "since": "8.0"
+    },
+    "stop": {
+     "since": "8.0"
+    },
+    "sortorder": {
+     "since": "8.0"
+    },
+    "status": {
+     "since": "8.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "preservekeys",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "cep_ruleids": {
+     "type": "ID/array",
+     "since": "8.0"
+    }
+   },
+   "selects": {
+    "selectFilter": {
+     "type": "query",
+     "since": "8.0"
+    },
+    "selectWindow": {
+     "type": "query",
+     "since": "8.0"
+    },
+    "selectOperations": {
+     "type": "query",
+     "since": "8.0"
+    }
+   },
+   "filter_props": [
+    "cep_ruleid",
+    "name",
+    "window_type",
+    "stop",
+    "sortorder",
+    "status"
+   ],
+   "search_props": [
+    "name",
+    "description",
+    "error"
+   ],
+   "notes": [
+    "Not on the 8.0.0rc2 reference pages; from CCepRule.php, verified live."
+   ]
+  },
+  "hostdashboard.get": {
+   "object": "hostdashboard",
+   "sortfield": [
+    "hostid",
+    "dashboardid",
+    "name"
+   ],
+   "sortfield_versions": {
+    "hostid": {
+     "since": "7.0"
+    },
+    "dashboardid": {
+     "since": "7.0"
+    },
+    "name": {
+     "since": "7.0"
+    }
+   },
+   "common": [
+    "countOutput",
+    "editable",
+    "excludeSearch",
+    "filter",
+    "limit",
+    "output",
+    "search",
+    "searchByAny",
+    "searchWildcardsEnabled",
+    "sortfield",
+    "sortorder",
+    "startSearch"
+   ],
+   "params": {
+    "hostids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "dashboardids": {
+     "type": "ID/array",
+     "since": "7.0"
+    },
+    "groupCount": {
+     "type": "flag",
+     "since": "7.0"
+    }
+   },
+   "selects": {
+    "selectPages": {
+     "type": "query",
+     "since": "7.0"
+    }
+   },
+   "filter_props": [
+    "dashboardid",
+    "name",
+    "display_period",
+    "auto_start",
+    "templateid"
+   ],
+   "search_props": [
+    "name"
+   ],
+   "notes": [
+    "Not on the reference pages; from CHostDashboard.php (7.0+), verified live on 7.4. hostids is required."
+   ]
+  }
+ },
+ "objects": {
+  "ceprule": {
+   "props": {
+    "cep_ruleid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "8.0"
+    },
+    "name": {
+     "type": "string",
+     "since": "8.0"
+    },
+    "window_type": {
+     "type": "integer",
+     "since": "8.0",
+     "values": {
+      "0": "none",
+      "1": "simple window",
+      "2": "cause and symptom",
+      "3": "simple window once",
+      "4": "pattern match"
+     }
+    },
+    "stop": {
+     "type": "integer",
+     "since": "8.0",
+     "values": {
+      "0": "continue",
+      "1": "stop processing"
+     }
+    },
+    "sortorder": {
+     "type": "integer",
+     "since": "8.0"
+    },
+    "description": {
+     "type": "text",
+     "since": "8.0"
+    },
+    "status": {
+     "type": "integer",
+     "since": "8.0",
+     "values": {
+      "0": "enabled",
+      "1": "disabled"
+     }
+    },
+    "error": {
+     "type": "string",
+     "readonly": true,
+     "since": "8.0"
+    }
+   },
+   "notes": [
+    "From CCepRule::OUTPUT_FIELDS."
+   ]
+  },
+  "hostdashboard": {
+   "props": {
+    "hostid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "dashboardid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "name": {
+     "type": "string",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "display_period": {
+     "type": "integer",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "auto_start": {
+     "type": "integer",
+     "readonly": true,
+     "since": "7.0"
+    },
+    "templateid": {
+     "type": "ID",
+     "readonly": true,
+     "since": "7.0"
+    }
+   },
+   "notes": [
+    "From CHostDashboard::OUTPUT_FIELDS; read-only object."
+   ]
+  }
+ },
+ "sources": [
+  "frontend source 8.0.0rc2: ui/include/classes/api/services/CCepRule.php (no reference page in 8.0.0rc2)",
+  "frontend source 7.0 ... 8.0: ui/include/classes/api/services/CHostDashboard.php (no reference page)"
+ ]
+}
