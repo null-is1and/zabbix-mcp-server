@@ -22,8 +22,10 @@ from __future__ import annotations
 import base64
 import logging
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
+
+from zabbix_mcp.timezones import zone_name
 
 logger = logging.getLogger("zabbix_mcp.reporting")
 
@@ -35,6 +37,18 @@ try:
     REPORTING_AVAILABLE = True
 except ImportError:
     REPORTING_AVAILABLE = False
+except OSError as _exc:
+    # weasyprint is installed but a native library it dlopen()s at import
+    # time (Pango, GDK-PixBuf, ...) is missing. That raises OSError, not
+    # ImportError - without this branch it propagates out of server startup
+    # and takes the whole MCP server down instead of just disabling reports.
+    REPORTING_AVAILABLE = False
+    logger.warning(
+        "PDF reporting disabled: weasyprint is installed but a system library "
+        "it needs could not be loaded (%s). Install weasyprint's OS "
+        "dependencies (Pango / GDK-PixBuf) to enable report_generate.",
+        _exc,
+    )
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 # Custom templates added via the admin portal live here. `load_custom_templates`
@@ -81,6 +95,31 @@ def _compute_gauge_arc_path(percentage: float) -> str:
     end_x = 100.0 + 80.0 * math.cos(angle_rad)
     end_y = 100.0 - 80.0 * math.sin(angle_rad)
     return f"M 20 100 A 80 80 0 0 1 {end_x:.1f} {end_y:.1f}"
+
+
+def _generated_at(tz: tzinfo | None = None) -> str:
+    """The "generated at" stamp: now in *tz* (UTC by default) plus the zone's name."""
+    zone = tz if tz is not None else timezone.utc
+    return datetime.now(zone).strftime("%Y-%m-%d %H:%M ") + zone_name(zone)
+
+
+def _data_uri_fetcher(url: str, *args, **kwargs):
+    """What a report may load while it is turned into a PDF: data: URIs only. Every
+    image of a report is embedded that way; WeasyPrint's own fetcher would read any
+    file:// path and fetch any http(s):// URL a template names."""
+    if not str(url).startswith("data:"):
+        raise ValueError(f"reports load data: URIs only, not {str(url)[:80]}")
+    return weasyprint.default_url_fetcher(url, *args, **kwargs)
+
+
+def _report_url_fetcher():
+    """The fetcher for ``weasyprint.HTML``: data: URIs only. WeasyPrint 68 and later
+    take a ``URLFetcher`` object (a plain function is refused there), earlier releases
+    a function."""
+    fetcher_class = getattr(weasyprint, "URLFetcher", None)
+    if fetcher_class is not None:
+        return fetcher_class(allowed_protocols={"data"})
+    return _data_uri_fetcher
 
 
 def _read_logo_as_base64(logo_path: str) -> str | None:
@@ -150,29 +189,44 @@ class ReportEngine:
             autoescape=True,
         )
 
-    def render_pdf(self, template_name: str, context: dict) -> bytes:
-        """Render an HTML template to PDF bytes."""
-        template = self._env.get_template(template_name)
+    def build_context(self, context: dict) -> dict:
+        """Merge *context* over the common template values.
 
-        # Build common context values
+        ``context["tz"]`` (a ``tzinfo``, as resolved per call by
+        :func:`zabbix_mcp.timezones.resolve_zone`) selects the zone the
+        ``generated_at`` stamp is rendered in; it is popped from the
+        result because templates get the zone's name as ``timezone``
+        instead. Without it the stamp is in UTC, as before v1.41.
+        """
         logo_base64: str | None = None
         if self.logo_path:
             logo_base64 = _read_logo_as_base64(self.logo_path)
 
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        context = dict(context)
+        tz = context.pop("tz", None)
+        if not isinstance(tz, tzinfo):
+            tz = timezone.utc
 
         common: dict = {
             "logo_base64": logo_base64,
             "company": self.company_name,
             "subtitle": self.subtitle,
-            "generated_at": now,
+            "generated_at": _generated_at(tz),
+            "timezone": zone_name(tz),
             "page_label": "Page",
         }
         common.update(context)
+        return common
 
-        html_string = template.render(**common)
+    def render_html(self, template_name: str, context: dict) -> str:
+        """Render an HTML template to a string (the PDF's source)."""
+        template = self._env.get_template(template_name)
+        return template.render(**self.build_context(context))
 
-        pdf_doc = weasyprint.HTML(string=html_string).write_pdf()
+    def render_pdf(self, template_name: str, context: dict) -> bytes:
+        """Render an HTML template to PDF bytes."""
+        html_string = self.render_html(template_name, context)
+        pdf_doc = weasyprint.HTML(string=html_string, url_fetcher=_report_url_fetcher()).write_pdf()
         return pdf_doc
 
     def load_custom_templates(self, custom_templates: dict) -> None:
@@ -254,7 +308,8 @@ class ReportEngine:
             ``fetch_*`` function in :mod:`zabbix_mcp.reporting.data_fetcher`.
         **options:
             Extra key/value pairs merged into the template context
-            (e.g. ``company_name``).
+            (e.g. ``company_name``). ``tz`` (a ``tzinfo``) selects the
+            zone of the ``generated_at`` stamp; see :meth:`build_context`.
         """
         template_file = self._templates.get(report_type)
         if template_file is None:
