@@ -33,7 +33,7 @@ Flow:
 1. The framework's authorize handler calls
    ``ZmcpOAuthProvider.authorize`` which stashes the pending request
    and returns ``<public_url>/oauth/login?request_id=<opaque>``.
-   FastMCP redirects the user-agent there.
+   MCPServer redirects the user-agent there.
 2. GET renders a login form + a consent block listing the scopes the
    client asked for plus the scopes the server is willing to grant.
 3. POST verifies username + password against ``[admin.users.*]``,
@@ -44,7 +44,10 @@ Flow:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -107,35 +110,78 @@ _ROLE_SCOPE_CAP: dict[str, set[str]] = {
 }
 
 
-def _verify_admin_user(config: Any, username: str, password: str) -> tuple[bool, str]:
+def _verify_admin_user(config: Any, username: str, password: str) -> tuple[bool, str, str | None]:
     """Validate (username, password) against [admin.users.*] in config.
 
-    Returns ``(authenticated, role)``.  ``role`` is the empty string
-    when authentication failed.  Wrong username and wrong password
-    both return False with the same code path so the response time
-    does not leak which side mismatched.
+    Returns ``(authenticated, role, timezone)``.  ``role`` is the empty
+    string and ``timezone`` is None when authentication failed.  Wrong
+    username and wrong password both return False with the same code
+    path so the response time does not leak which side mismatched.
+
+    ``timezone`` is the user's optional ``[admin.users.X].timezone``
+    (issue #75), validated here so a hand-edited unknown zone is
+    dropped (logged) instead of failing the login.
     """
     if not username or not password:
-        return False, ""
+        return False, "", None
     cfg_path = getattr(config, "_config_path", None)
     if not cfg_path:
-        return False, ""
+        return False, "", None
     try:
         from zabbix_mcp.admin.config_writer import load_config_document
-        from zabbix_mcp.admin.auth import verify_password
+        from zabbix_mcp.admin.auth import verify_password_timed
         doc = load_config_document(cfg_path)
         users = (doc.get("admin", {}) or {}).get("users", {}) or {}
         user = users.get(username)
-        if user is None:
-            return False, ""
-        if user.get("disabled"):
-            return False, ""
-        if not verify_password(password, str(user.get("password_hash", ""))):
-            return False, ""
-        return True, str(user.get("role", "viewer") or "viewer")
+        # the same work whether the user exists or not (no timing tells the names)
+        if not verify_password_timed(password, str((user or {}).get("password_hash", "")) or None):
+            return False, "", None
+        if user is None or user.get("disabled"):
+            return False, "", None
+        timezone = _valid_timezone_or_none(user.get("timezone"))
+        if user.get("timezone") and timezone is None:
+            logger.warning(
+                "Admin user '%s' has an unknown timezone %r in config.toml; ignoring it",
+                username, user.get("timezone"),
+            )
+        return True, str(user.get("role", "viewer") or "viewer"), timezone
     except Exception as exc:  # pragma: no cover
         logger.warning("Admin user verification failed for %s: %s", username, exc)
-        return False, ""
+        return False, "", None
+
+
+def _valid_timezone_or_none(raw: Any) -> str | None:
+    """Normalised IANA zone name, or None when empty or unknown."""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    from zabbix_mcp.timezones import validate_timezone
+    try:
+        return validate_timezone(text)
+    except ValueError:
+        return None
+
+
+def _browser_timezone(form: Any) -> str | None:
+    """The zone the browser reported in the hidden ``browser_timezone``
+    input (``Intl.DateTimeFormat().resolvedOptions().timeZone``), or
+    None when JS was off or the value is not a zone we know. Never an
+    error: the field is a hint, not something the operator typed.
+    """
+    return _valid_timezone_or_none(form.get("browser_timezone", ""))
+
+
+def _resolve_consent_timezone(pending: Any, form: Any) -> str | None:
+    """Zone the tokens of this consent will carry (issue #75).
+
+    The portal user's explicit zone wins; else the zone the browser
+    posted with the consent form (or, failing that, with the login
+    form); else None = inherit from the Zabbix entry / ``[server]``.
+    """
+    explicit = getattr(pending, "authenticated_timezone", None)
+    if explicit:
+        return explicit
+    return _browser_timezone(form) or getattr(pending, "browser_timezone", None) or None
 
 
 def _scope_cap_for_role(role: str) -> set[str]:
@@ -280,10 +326,35 @@ async def handle_oauth_login(
         )
 
     if step == "consent":
-        return _handle_consent_step(provider, pending, request_id, form, client_ip)
+        return _handle_consent_step(provider, pending, request_id, form, client_ip,
+                                    request.cookies.get(consent_cookie_name(request_id), ""))
     return _handle_login_step(
         provider, pending, request_id, form, client_ip, config,
+        secure=request.url.scheme == "https",
     )
+
+
+# The consent step belongs to the browser that logged in. A request_id alone is not
+# enough: it travels in the login link, and whoever holds the link could otherwise
+# submit "Allow" for a user who logged in through it and receive the code at a
+# redirect URI of their own (a client registers itself without authentication).
+CONSENT_COOKIE = "zmcp_oauth_consent"
+
+
+def consent_cookie_name(request_id: str) -> str:
+    """One cookie per login: two MCP clients connecting at once, in two tabs of one
+    browser, do not overwrite each other's."""
+    return f"{CONSENT_COOKIE}_{hashlib.sha256(request_id.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _nonce_hash(nonce: str) -> str:
+    return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+
+
+def _redirect_host(pending: Any) -> str:
+    from urllib.parse import urlsplit
+    parts = urlsplit(str(pending.params.redirect_uri or ""))
+    return parts.netloc or str(pending.params.redirect_uri or "")
 
 
 def _render_login_form(provider: Any, request: Request) -> Response:
@@ -317,6 +388,8 @@ def _handle_login_step(
     form: Any,
     client_ip: str,
     config: Any,
+    *,
+    secure: bool = False,
 ) -> Response:
     """Step 1: credential verification -> render consent screen on success."""
     from zabbix_mcp.admin.audit_writer import write_audit
@@ -324,7 +397,7 @@ def _handle_login_step(
     username = str(form.get("username", "") or "").strip()
     password = str(form.get("password", "") or "")
 
-    authenticated, role = _verify_admin_user(config, username, password)
+    authenticated, role, user_timezone = _verify_admin_user(config, username, password)
     if not authenticated:
         _oauth_login_limiter.record_attempt(client_ip)
         write_audit(
@@ -348,6 +421,10 @@ def _handle_login_step(
     _oauth_login_limiter.reset(client_ip)
     pending.authenticated_subject = username
     pending.authenticated_role = role
+    # Zone hints for the consent step (issue #75): the user's own
+    # portal zone and what their browser said on the login form.
+    pending.authenticated_timezone = user_timezone
+    pending.browser_timezone = _browser_timezone(form)
     write_audit(
         action="oauth.login_success",
         user=username,
@@ -377,15 +454,25 @@ def _handle_login_step(
                     row["description"]
                     + f"  -- not available to your role ({role}); ask an admin."
                 )
-    return HTMLResponse(_render_template(
+    nonce = secrets.token_urlsafe(32)
+    pending.consent_nonce_hash = _nonce_hash(nonce)
+    response = HTMLResponse(_render_template(
         "oauth_consent.html",
         request_id=request_id,
         client_name=(pending.client.client_name or "").strip() or str(pending.client.client_id or ""),
+        redirect_host=_redirect_host(pending),
         subject=username,
         subject_role=role,
         scopes=rows,
         has_wildcard_request=has_wildcard,
     ))
+    import time as _time
+    # as long as the request it belongs to (the pending entry's lifetime, [oauth] setting);
+    # path "/" so that it does not depend on where the login is served
+    lifetime = max(60, int(getattr(pending, "expires_at", _time.time() + 600) - _time.time()))
+    response.set_cookie(consent_cookie_name(request_id), nonce, max_age=lifetime, path="/",
+                        httponly=True, samesite="strict", secure=secure)
+    return response
 
 
 def _handle_consent_step(
@@ -394,9 +481,29 @@ def _handle_consent_step(
     request_id: str,
     form: Any,
     client_ip: str,
+    nonce: str = "",
 ) -> Response:
     """Step 2: operator clicked Allow / Deny on the consent screen."""
     from zabbix_mcp.admin.audit_writer import write_audit
+
+    expected = getattr(pending, "consent_nonce_hash", None)
+    if pending.authenticated_subject is not None and (
+            not expected or not nonce or not hmac.compare_digest(expected, _nonce_hash(nonce))):
+        # not the browser that logged in
+        _oauth_login_limiter.record_attempt(client_ip)
+        write_audit(
+            action="oauth.consent_rejected",
+            user=pending.authenticated_subject,
+            target_type="oauth_client",
+            target_id=str(pending.client.client_id or ""),
+            details={"client_name": pending.client.client_name or "", "reason": "not_the_browser_that_logged_in"},
+            ip=client_ip or "",
+        )
+        return _render_error_page(
+            "This consent was not sent from the browser that signed in. "
+            "Reconnect from your MCP client to begin a new login.",
+            status_code=403,
+        )
 
     if pending.authenticated_subject is None:
         # Cannot reach the consent screen without first authenticating.
@@ -484,8 +591,15 @@ def _handle_consent_step(
             status_code=403,
         )
 
+    timezone = _resolve_consent_timezone(pending, form)
+    # A zone the portal user set is the operator's word; one the browser
+    # reported is only a hint and ranks below the server's own pins.
+    timezone_implicit = bool(timezone) and not bool(getattr(pending, "authenticated_timezone", None))
     redirect_url = provider.complete_pending(
         request_id, allowed_grant, subject=subject,
+        role=pending.authenticated_role or "viewer",
+        timezone=timezone,
+        timezone_implicit=timezone_implicit,
     )
     if redirect_url is None:
         return _render_error_page(
@@ -502,12 +616,15 @@ def _handle_consent_step(
             "client_name": pending.client.client_name or "",
             "requested_scopes": list(pending.params.scopes or []),
             "granted_scopes": allowed_grant,
+            "timezone": timezone,
         },
         ip=client_ip or "",
     )
     logger.info(
-        "OAuth consent granted: user=%s client=%s requested=%s granted=%s",
+        "OAuth consent granted: user=%s client=%s requested=%s granted=%s timezone=%s",
         subject, pending.client.client_id,
-        list(pending.params.scopes or []), allowed_grant,
+        list(pending.params.scopes or []), allowed_grant, timezone,
     )
-    return RedirectResponse(redirect_url, status_code=302)
+    done = RedirectResponse(redirect_url, status_code=302)
+    done.delete_cookie(consent_cookie_name(request_id), path="/")
+    return done

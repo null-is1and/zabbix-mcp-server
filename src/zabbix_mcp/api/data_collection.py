@@ -50,7 +50,8 @@ _HOST_METHODS: list[MethodDef] = [
         api_method="host.get",
         tool_name="host_get",
         description=(
-            "Retrieve hosts. Hosts are the core monitored entities in Zabbix - they represent "
+            "Retrieve hosts. A template is not a host: host_get does not find it, template_get does "
+            "(search by its name there). Hosts are the core monitored entities in Zabbix - they represent "
             "servers, VMs, network devices, or any other resource you monitor. Each host belongs "
             "to one or more host groups, can be linked to templates, and contains items, triggers, "
             "and graphs that define what is monitored and how."
@@ -64,9 +65,14 @@ _HOST_METHODS: list[MethodDef] = [
         tool_name="host_create",
         description=(
             "Create a new host. At minimum you must supply 'host' (technical name) and 'groups' "
-            "(array of host group IDs). You can also attach templates, interfaces, macros, and tags "
-            "in the same call. "
-            "Interface 'type' accepts symbolic names: AGENT, SNMP, IPMI, JMX."
+            "as objects: [{\"groupid\": \"2\"}], not a list of IDs. In the same call: 'templates' "
+            "[{\"templateid\": \"10515\"}], 'macros' [{\"macro\": \"{$SNMP_COMMUNITY}\", \"value\": \"public\"}], "
+            "'tags' and 'interfaces' [{\"type\": 1, \"main\": 1, \"useip\": 1, \"ip\": \"192.0.2.10\", "
+            "\"dns\": \"\", \"port\": \"10050\"}]. Interface 'type': 1 AGENT, 2 SNMP, 3 IPMI, 4 JMX (names accepted). "
+            "An SNMP interface is type 2 (or SNMP), usually port \"161\", with its settings in 'details': {\"version\": 2, \"bulk\": 1, \"community\": \"{$SNMP_COMMUNITY}\"} for SNMPv2c (version 1, 2 or 3; v3 takes securityname, securitylevel and the auth/priv keys instead of community). Look the IDs up first (hostgroup_get, template_get). "
+            "A host_get answer can be sent as a copy: its hostgroups and parentTemplates are taken as "
+            "'groups' and 'templates'; give it a new 'host' and 'name' and leave out its uuid. Its items "
+            "and triggers come with its templates, not with the copy."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -77,7 +83,13 @@ _HOST_METHODS: list[MethodDef] = [
         description=(
             "Update an existing host. The 'hostid' field is required. Any properties you supply "
             "will overwrite the current values. Use this to rename hosts, change their status, "
-            "reassign groups or templates, etc."
+            "reassign groups or templates (as objects: [{\"groupid\": \"2\"}], [{\"templateid\": \"7\"}]), "
+            "etc. List properties REPLACE what the host has: "
+            "'groups', 'templates', 'tags', 'macros' and 'interfaces' must carry everything to keep. "
+            "This is also how interfaces are edited on Zabbix 8.0, which removed the hostinterface "
+            "write methods: read the host with selectInterfaces, change / add / drop an entry "
+            "(an entry with its interfaceid is updated, one without is created, one left out is "
+            "removed) and send the whole list back."
         ),
         read_only=False,
         params=UPDATE_PARAMS,
@@ -93,8 +105,11 @@ _HOST_METHODS: list[MethodDef] = [
         api_method="host.massadd",
         tool_name="host_massadd",
         description=(
-            "Add groups, templates, macros, or interfaces to multiple hosts at once. "
-            "Params must include 'hosts' (array of host IDs) and the objects to add."
+            "Add groups, templates, macros, or interfaces to multiple hosts at once (no tags: send each "
+            "host's complete tag list with host_update). A linked template takes over host items with "
+            "the same key (they become inherited). "
+            "Params must include 'hosts' as objects ([{\"hostid\": \"10084\"}]) and the objects to add, "
+            "written the same way (groups [{\"groupid\": ...}], templates [{\"templateid\": ...}])."
         ),
         read_only=False,
         params=MASS_PARAMS,
@@ -113,9 +128,10 @@ _HOST_METHODS: list[MethodDef] = [
         api_method="host.massupdate",
         tool_name="host_massupdate",
         description=(
-            "Mass-update properties on multiple hosts at once. Replaces specified properties "
-            "for all listed hosts. Params must include 'hosts' (array of host IDs) and the "
-            "properties to set."
+            "Mass-update properties on multiple hosts at once (removed in Zabbix 8.0 - use "
+            "host_update per host there). Replaces specified properties "
+            "for all listed hosts. Params must include 'hosts' as objects ([{\"hostid\": \"10084\"}]) "
+            "and the properties to set (groups [{\"groupid\": ...}], templates [{\"templateid\": ...}])."
         ),
         read_only=False,
         params=MASS_PARAMS,
@@ -183,7 +199,10 @@ _HOSTGROUP_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="hostgroup.massupdate",
         tool_name="hostgroup_massupdate",
-        description="Replace all hosts or templates in the specified host groups.",
+        description=(
+            "Replace all hosts or templates in the specified host groups. Removed in Zabbix 8.0 - "
+            "use hostgroup_update, hostgroup_massadd or hostgroup_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -195,7 +214,7 @@ _HOSTGROUP_METHODS: list[MethodDef] = [
         params=[
             ParamDef(
                 "params", "dict",
-                "Propagation parameters. Must include 'groups' (array of group IDs) and optionally 'permissions' (bool).",
+                "Propagation parameters. Must include 'groups' as objects ([{\"groupid\": \"2\"}]) and optionally 'permissions' (bool).",
                 required=True,
             ),
         ],
@@ -229,7 +248,7 @@ _HOSTINTERFACE_METHODS: list[MethodDef] = [
         description=(
             "Create a new host interface. Requires 'hostid', 'type', 'main' (0/1), "
             "'useip' (0/1), 'ip', 'dns', and 'port'. "
-            "Symbolic names accepted for 'type': AGENT, SNMP, IPMI, JMX."
+            "'type': 1 AGENT, 2 SNMP, 3 IPMI, 4 JMX (names accepted). An SNMP interface is type 2 (or SNMP) with its settings in 'details': {\"version\": 2, \"bulk\": 1, \"community\": \"{$SNMP_COMMUNITY}\"} for SNMPv2c (version 1, 2 or 3; v3 takes securityname, securitylevel and the auth/priv keys instead of community)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -239,7 +258,7 @@ _HOSTINTERFACE_METHODS: list[MethodDef] = [
         tool_name="hostinterface_update",
         description=(
             "Update an existing host interface. The 'interfaceid' field is required. "
-            "Symbolic names accepted for 'type': AGENT, SNMP, IPMI, JMX."
+            "'type': 1 AGENT, 2 SNMP, 3 IPMI, 4 JMX (names accepted). An SNMP interface is type 2 (or SNMP) with its settings in 'details': {\"version\": 2, \"bulk\": 1, \"community\": \"{$SNMP_COMMUNITY}\"} for SNMPv2c (version 1, 2 or 3; v3 takes securityname, securitylevel and the auth/priv keys instead of community)."
         ),
         read_only=False,
         params=UPDATE_PARAMS,
@@ -271,6 +290,8 @@ _HOSTINTERFACE_METHODS: list[MethodDef] = [
         description=(
             "Replace all interfaces on a host. Any existing interfaces not present in the request "
             "will be removed. Params must include 'hostid' and 'interfaces' array."
+            " Removed in Zabbix 8.0 - use host_update with 'interfaces' there (the list "
+            "replaces the host's current interfaces in the same way)."
         ),
         read_only=False,
         params=[
@@ -292,7 +313,7 @@ _ITEM_GET_EXTRA: list[ParamDef] = [
     ParamDef("hostids", "list[str]", "Return only items that belong to the given hosts."),
     ParamDef("templateids", "list[str]", "Return only items that belong to the given templates."),
     ParamDef("triggerids", "list[str]", "Return only items used in the given triggers."),
-    ParamDef("with_triggers", "bool", "Only return items that are used in at least one trigger."),
+    ParamDef("with_triggers", "bool", "true = only items used in at least one trigger, false = only items used in no trigger. Omit it for both."),
     ParamDef("webitems", "bool", "Include web items (items created by web scenarios) in the result."),
 ]
 
@@ -314,16 +335,19 @@ _ITEM_METHODS: list[MethodDef] = [
         api_method="item.create",
         tool_name="item_create",
         description=(
-            "Create a new item. Requires 'hostid', 'name', 'key_' (item key), 'type' (collection method), "
-            "and 'value_type' (data type). The item is bound to the host and collects data according to "
+            "Create a new item. Requires 'hostid' (of a host or a template), 'name', 'key_' (item key), 'type' (collection method), "
+            "and 'value_type' (data type). A copy of an item_get answer for another host or template takes "
+            "that one's hostid (and on a host its interfaceid) and no uuid. The item is bound to the host and collects data according to "
             "its type and interval. "
-            "Symbolic names accepted for 'type': ZABBIX_PASSIVE, TRAPPER, SIMPLE_CHECK, INTERNAL, "
-            "ZABBIX_ACTIVE, WEB_ITEM, EXTERNAL_CHECK, DATABASE_MONITOR, IPMI, SSH, TELNET, CALCULATED, "
-            "JMX, SNMP_TRAP, DEPENDENT, HTTP_AGENT, SNMP_AGENT, SCRIPT, BROWSER. "
+            "Symbolic names accepted for 'type': ZABBIX_AGENT (= ZABBIX_PASSIVE, 0), TRAPPER, SIMPLE_CHECK, INTERNAL, "
+            "ZABBIX_AGENT_ACTIVE (= ZABBIX_ACTIVE, 7), WEB_ITEM, EXTERNAL_CHECK, DATABASE_MONITOR, IPMI, SSH, TELNET, CALCULATED, "
+            "JMX, SNMP_TRAP, DEPENDENT, HTTP_AGENT, SNMP_AGENT, SCRIPT, BROWSER (7.0+), TELEMETRY_QUERY (8.0+: "
+            "reads the server's OpenTelemetry data; needs 'query' and takes 'time_shift', 'lookback_limit', "
+            "'granularity'). "
             "Symbolic names for 'value_type': FLOAT, CHAR, LOG, UNSIGNED, TEXT, BINARY, JSON (8.0+). "
             "Preprocessing steps also accept symbolic type names (e.g. JSONPATH, DISCARD_UNCHANGED_HEARTBEAT). "
             "For HTTP_AGENT items, 'authtype' accepts: NONE, BASIC, NTLM, KERBEROS, DIGEST; "
-            "'post_type' accepts: RAW, JSON. "
+            "'post_type' accepts: RAW, JSON, XML. "
             "Value maps can be assigned by name: \"valuemap\": {\"name\": \"My Map\"} "
             "(the server resolves the ID automatically)."
         ),
@@ -362,7 +386,8 @@ _TRIGGER_GET_EXTRA: list[ParamDef] = [
     ParamDef("templateids", "list[str]", "Return only triggers that belong to the given templates."),
     ParamDef("only_true", "bool", "Only return triggers that are currently in a problem (PROBLEM) state."),
     ParamDef("min_severity", "int", "Minimum trigger severity to return (0-5: NOT_CLASSIFIED, INFORMATION, WARNING, AVERAGE, HIGH, DISASTER)", required=False),
-    ParamDef("with_unacknowledged_events", "bool", "Only return triggers that have unacknowledged problem events."),
+    ParamDef("with_unacknowledged_events", "bool", "Only return triggers that have unacknowledged problem events.",
+             api_name="withUnacknowledgedEvents"),
     ParamDef("active", "bool", "Only return enabled triggers that belong to enabled hosts."),
     ParamDef("monitored", "bool", "Only return enabled triggers that belong to enabled hosts and contain only enabled items."),
 ]
@@ -375,7 +400,12 @@ _TRIGGER_METHODS: list[MethodDef] = [
             "Retrieve triggers. Triggers define conditions (expressions) that evaluate item values "
             "and determine when a problem exists. Each trigger references one or more items via an "
             "expression like 'last(/host/key) > 90'. Triggers have severity levels (0-5) and generate "
-            "events when their state changes."
+            "events when their state changes. "
+            "The expression comes in the form the update tool takes, functions written out and user "
+            "macros kept ('avg(/host/key,10m)>{$MAX}'; Zabbix 5.4 and later, before that Zabbix's own "
+            "expansion). extra_params expandExpression: true asks Zabbix for its own expansion instead, "
+            "with every user macro replaced by its current value: for reading, never for sending back "
+            "(the trigger would lose its macros); false returns the stored form with function IDs."
         ),
         read_only=True,
         compact_fields=("triggerid", "description", "priority", "status", "value"),
@@ -389,7 +419,8 @@ _TRIGGER_METHODS: list[MethodDef] = [
             "items. Example expression: 'last(/myhost/system.cpu.load) > 5'. Optionally set "
             "'priority' and 'status' (0=enabled, 1=disabled). "
             "Symbolic names accepted for 'priority': NOT_CLASSIFIED, INFORMATION, WARNING, "
-            "AVERAGE, HIGH, DISASTER."
+            "AVERAGE, HIGH, DISASTER. A trigger copied to another host or template names that one in "
+            "its expression (/newhost/key), or it stays on the original's item; leave out its uuid."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -516,8 +547,12 @@ _TEMPLATE_METHODS: list[MethodDef] = [
         api_method="template.create",
         tool_name="template_create",
         description=(
-            "Create a new template. Requires 'host' (technical name) and 'groups' (array of "
-            "template group IDs). Templates serve as blueprints for monitoring configuration."
+            "Create a new template. Requires 'host' (technical name) and 'groups' as objects "
+            "([{\"groupid\": \"1\"}], template groups: templategroup_get; before Zabbix 6.2 they are host "
+            "groups, hostgroup_get). A copy of a template_get answer (its templategroups are taken as "
+            "'groups') gets a new host and name and no uuid; "
+            "its items, triggers and discovery rules are not part of it (item_create, trigger_create, ... "
+            "on the new templateid). Templates serve as blueprints for monitoring configuration."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -525,7 +560,20 @@ _TEMPLATE_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="template.update",
         tool_name="template_update",
-        description="Update an existing template. The 'templateid' field is required.",
+        description=(
+            "Update an existing template. The 'templateid' field is required. Mind the two "
+            "directions of template linkage: template_get returns 'parentTemplates' (what this "
+            "template inherits from) and 'templates' (the templates that inherit from it), while "
+            "'templates' HERE sets what it inherits from ([{'templateid': X}], replaces the list, "
+            "an empty list unlinks everything; 'templates_clear' unlinks and clears). An object "
+            "read with template_get can be sent back as it is: when it still carries "
+            "'parentTemplates', its 'templates' is recognised as the other relation and left out, "
+            "so linkage does not change; a 'templates' that differs from what template_get "
+            "returns is refused, because it cannot be told which relation is meant. To change "
+            "what the template inherits from, send 'templates' without 'parentTemplates' "
+            "(template_get returns the two together whenever 'templates' is selected, so that "
+            "an object read through it is always recognised)."
+        ),
         read_only=False,
         params=UPDATE_PARAMS,
     ),
@@ -542,21 +590,32 @@ _TEMPLATE_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="template.massadd",
         tool_name="template_massadd",
-        description="Add groups, hosts, or macros to multiple templates at once.",
+        description=(
+            "Add template groups ('groups'), 'macros' or linked templates ('templates_link') to "
+            "several templates ('templates': [{\"templateid\": \"10001\"}]) at once. No hosts and no "
+            "tags: to link a template to hosts use host_massadd with 'hosts' and 'templates'."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
     MethodDef(
         api_method="template.massremove",
         tool_name="template_massremove",
-        description="Remove groups, hosts, or macros from multiple templates at once.",
+        description=(
+            "Remove template groups ('groupids'), 'macros', linked templates ('templateids_link', or "
+            "'templateids_clear' to also delete what they brought) from several templates "
+            "('templateids') at once. No hosts: to unlink a template from hosts use host_massremove."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
     MethodDef(
         api_method="template.massupdate",
         tool_name="template_massupdate",
-        description="Replace groups, hosts, or macros for multiple templates at once.",
+        description=(
+            "Replace groups, hosts, or macros for multiple templates at once. Removed in Zabbix 8.0 - "
+            "use template_update, template_massadd or template_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -621,7 +680,10 @@ _TEMPLATEGROUP_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="templategroup.massupdate",
         tool_name="templategroup_massupdate",
-        description="Replace all templates in the specified template groups.",
+        description=(
+            "Replace all templates in the specified template groups. Removed in Zabbix 8.0 - "
+            "use templategroup_update, templategroup_massadd or templategroup_massremove there."
+        ),
         read_only=False,
         params=MASS_PARAMS,
     ),
@@ -633,7 +695,7 @@ _TEMPLATEGROUP_METHODS: list[MethodDef] = [
         params=[
             ParamDef(
                 "params", "dict",
-                "Propagation parameters. Must include 'groups' (array of group IDs) and optionally 'permissions' (bool).",
+                "Propagation parameters. Must include 'groups' as objects ([{\"groupid\": \"2\"}]) and optionally 'permissions' (bool).",
                 required=True,
             ),
         ],
@@ -669,9 +731,11 @@ _DISCOVERYRULE_METHODS: list[MethodDef] = [
         description=(
             "Create a new LLD rule. Requires 'hostid', 'name', 'key_', and 'type'. The rule will "
             "periodically discover entities and create real objects from prototypes. "
-            "Symbolic names accepted for 'type': ZABBIX_PASSIVE, TRAPPER, SIMPLE_CHECK, INTERNAL, "
-            "ZABBIX_ACTIVE, EXTERNAL_CHECK, DATABASE_MONITOR, IPMI, SSH, TELNET, "
-            "HTTP_AGENT, SNMP_AGENT, SCRIPT, DEPENDENT."
+            "Symbolic names accepted for 'type': ZABBIX_AGENT (= ZABBIX_PASSIVE, 0), TRAPPER, SIMPLE_CHECK, INTERNAL, "
+            "ZABBIX_AGENT_ACTIVE (= ZABBIX_ACTIVE, 7), EXTERNAL_CHECK, DATABASE_MONITOR, IPMI, SSH, TELNET, "
+            "HTTP_AGENT, SNMP_AGENT, SCRIPT, DEPENDENT, BROWSER (7.2+), TELEMETRY_QUERY (8.0+: the "
+            "rows of a query over the server's OpenTelemetry data, with 'query', 'time_shift', "
+            "'lookback_limit' and 'granularity' as on a telemetry query item)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -762,7 +826,12 @@ _TRIGGERPROTOTYPE_METHODS: list[MethodDef] = [
         description=(
             "Retrieve trigger prototypes. Trigger prototypes are used by LLD rules to create "
             "real triggers for each discovered entity. Their expressions reference item prototypes "
-            "and use LLD macros."
+            "and use LLD macros. "
+            "The expression comes in the form the update tool takes, functions written out and user "
+            "macros kept ('avg(/host/key,10m)>{$MAX}'; Zabbix 5.4 and later, before that Zabbix's own "
+            "expansion). extra_params expandExpression: true asks Zabbix for its own expansion instead, "
+            "with every user macro replaced by its current value: for reading, never for sending back "
+            "(the trigger would lose its macros); false returns the stored form with function IDs."
         ),
         read_only=True,
         compact_fields=("triggerid", "description", "priority", "status"),
@@ -920,7 +989,8 @@ _DISCOVERYRULEPROTOTYPE_METHODS: list[MethodDef] = [
         description=(
             "Create a new LLD rule prototype (Zabbix 7.4+). Requires 'hostid', 'name', 'key_', "
             "and 'type'. The key must include LLD macros from the parent discovery rule. "
-            "Symbolic names accepted for 'type' — same as discoveryrule_create."
+            "Symbolic names accepted for 'type' - same as discoveryrule_create, plus NESTED (a prototype "
+            "that reads the data of its parent rule instead of collecting its own)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -948,6 +1018,8 @@ _USERMACRO_GET_EXTRA: list[ParamDef] = [
     ParamDef("hostids", "list[str]", "Return only macros defined on the given hosts."),
     ParamDef("hostmacroids", "list[str]", "Return only host macros with the given IDs."),
     ParamDef("globalmacroids", "list[str]", "Return only global macros with the given IDs."),
+    ParamDef("globalmacro", "bool", "Return global macros (globalmacroid, macro, value, type, description) "
+             "instead of host and template macros."),
 ]
 
 _USERMACRO_METHODS: list[MethodDef] = [
@@ -1059,7 +1131,8 @@ _VALUEMAP_METHODS: list[MethodDef] = [
         tool_name="valuemap_create",
         description=(
             "Create a new value map. Requires 'hostid', 'name', and 'mappings' (array of "
-            "{'value': '0', 'newvalue': 'Down'} objects)."
+            "{'value': '0', 'newvalue': 'Down'} objects). A value map can be set on items of value_type "
+            "0 FLOAT, 1 CHAR or 3 UNSIGNED only (item_update with 'valuemapid')."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -1106,11 +1179,18 @@ _MAINTENANCE_METHODS: list[MethodDef] = [
         api_method="maintenance.create",
         tool_name="maintenance_create",
         description=(
-            "Create a new maintenance period. Requires 'name', 'active_since', 'active_till', "
-            "'timeperiods', and either 'groups' (list of {'groupid': X}) or 'hosts' (list of "
-            "{'hostid': X}) to define which hosts are affected. Zabbix 6.0+ replaced the legacy "
+            "Create a new maintenance period. Requires 'name', 'active_since', 'active_till' "
+            "(Unix timestamp, ISO 8601 date-time or a relative time such as now-1h), 'timeperiods', and either 'groups' (list of {'groupid': X}) or 'hosts' (list of "
+            "{'hostid': X}) to define which hosts are affected. A one-time window is "
+            "'timeperiods': [{\"timeperiod_type\": 0, \"start_date\": \"2026-01-31T22:00:00\", \"period\": 3600}] "
+            "(period in seconds; active_since / active_till must enclose it); timeperiod_type 2 daily, 3 weekly, "
+            "4 monthly take start_time (seconds after midnight) and every / dayofweek / day / month. Zabbix 6.0+ replaced the legacy "
             "groupids/hostids arrays with these object lists. Symbolic names accepted for "
-            "'maintenance_type': DATA_COLLECTION (with data), NO_DATA (without data)."
+            "'maintenance_type': DATA_COLLECTION (with data), NO_DATA (without data). "
+            "Zabbix 8.0+ can scope a with-data maintenance to problems instead of hosts: 'triggers' "
+            "(list of {'triggerid': X}, enough on its own when neither groups nor hosts are given) "
+            "and 'event_names' (list of {'value': text, 'operator': 2 contains / 3 does not contain}); "
+            "problem 'tags' gained the operators 1 (does not equal) and 3 (does not contain)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -1118,7 +1198,11 @@ _MAINTENANCE_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="maintenance.update",
         tool_name="maintenance_update",
-        description="Update an existing maintenance period. The 'maintenanceid' field is required.",
+        description=(
+            "Update an existing maintenance period. The 'maintenanceid' field is required. "
+            "'groups', 'hosts', 'timeperiods', 'tags' and, on Zabbix 8.0+, 'triggers' and "
+            "'event_names' replace the whole list when given."
+        ),
         read_only=False,
         params=UPDATE_PARAMS,
     ),
@@ -1145,7 +1229,8 @@ _CORRELATION_METHODS: list[MethodDef] = [
         description=(
             "Retrieve event correlations. Correlations define rules for automatically closing "
             "related problem events. For example, a correlation can close all 'service down' "
-            "problems when a 'service up' event is received."
+            "problems when a 'service up' event is received. Deprecated since Zabbix 8.0 in favour "
+            "of complex event processing (ceprule_get); it still works there."
         ),
         read_only=True,
         compact_fields=("correlationid", "name", "status"),
@@ -1156,7 +1241,11 @@ _CORRELATION_METHODS: list[MethodDef] = [
         tool_name="correlation_create",
         description=(
             "Create a new event correlation. Requires 'name', 'filter' (conditions), "
-            "and 'operations' (actions to take when conditions match)."
+            "and 'operations' (actions to take when conditions match). "
+            "filter.evaltype: 0=And/Or, 1=And, 2=Or, 3=custom expression; 'formula' and "
+            "the conditions' 'formulaid' only with evaltype 3 (the server drops them "
+            "otherwise, together with the read-only eval_formula). Deprecated since Zabbix 8.0: "
+            "on 8.0 and later prefer a CEP rule (ceprule_create)."
         ),
         read_only=False,
         params=CREATE_PARAMS,
@@ -1164,14 +1253,20 @@ _CORRELATION_METHODS: list[MethodDef] = [
     MethodDef(
         api_method="correlation.update",
         tool_name="correlation_update",
-        description="Update an existing event correlation. The 'correlationid' field is required.",
+        description=(
+            "Update an existing event correlation. The 'correlationid' field is required. "
+            "A correlation as returned by correlation_get (with selectFilter / selectOperations) "
+            "can be sent back as-is: the read-only eval_formula and, outside custom "
+            "expressions (evaltype 3), formula and formulaid are dropped before the call. "
+            "Deprecated since Zabbix 8.0 in favour of ceprule_update."
+        ),
         read_only=False,
         params=UPDATE_PARAMS,
     ),
     MethodDef(
         api_method="correlation.delete",
         tool_name="correlation_delete",
-        description="Delete event correlations by their IDs.",
+        description="Delete event correlations by their IDs. Deprecated since Zabbix 8.0 in favour of CEP rules (ceprule_delete).",
         read_only=False,
         params=DELETE_PARAMS,
     ),
@@ -1290,7 +1385,7 @@ _DSERVICE_METHODS: list[MethodDef] = [
             "discovered hosts (dhost) and are created by network discovery rules (drule)."
         ),
         read_only=True,
-        compact_fields=("dserviceid", "dhostid", "type", "status"),
+        compact_fields=("dserviceid", "dhostid", "dcheckid", "ip", "port", "status"),
         params=COMMON_GET_PARAMS + _DSERVICE_GET_EXTRA,
     ),
 ]
@@ -1358,7 +1453,9 @@ _CONFIGURATION_METHODS: list[MethodDef] = [
             "Export Zabbix configuration as YAML, XML, or JSON. Use this to back up or transfer "
             "hosts, templates, and other objects between Zabbix instances. "
             "Params: {\"format\": \"yaml\"|\"xml\"|\"json\", \"options\": {\"hosts\": [\"id\"], "
-            "\"templates\": [\"id\"], \"host_groups\": [\"id\"], ...}}"
+            "\"templates\": [\"id\"], \"host_groups\": [\"id\"], ...}}. Option keys: host_groups, "
+            "hosts, images, maps, mediaTypes, template_groups, templates, and on Zabbix 8.0+ also "
+            "dashboards and global_regexes (before 6.2 one key 'groups' for host_groups and template_groups)."
         ),
         read_only=True,
         params=[
@@ -1377,7 +1474,15 @@ _CONFIGURATION_METHODS: list[MethodDef] = [
         description=(
             "Import configuration into Zabbix from YAML, XML, or JSON. Use this to restore backups "
             "or deploy configuration across instances. "
-            "Params: {\"format\": \"yaml\"|\"xml\"|\"json\", \"source\": \"<config data>\", \"rules\": {...}}"
+            "Params: {\"format\": \"yaml\"|\"xml\"|\"json\", \"source\": \"<config data>\", \"rules\": {...}}. "
+            "Rules per section take createMissing / updateExisting / deleteMissing (true), e.g. "
+            "{\"templates\": {\"createMissing\": true}, \"items\": {\"createMissing\": true}, "
+            "\"triggers\": {\"createMissing\": true}}; templates and template_groups have no deleteMissing. "
+            "Zabbix finds an object of the source by its uuid, which every template, item, trigger and "
+            "discovery rule must carry: to import a COPY of an exported template, give it a new template "
+            "and name and a new uuid (32 hex digits, UUIDv4) on the template and on each of its items, "
+            "triggers and discovery rules; with the old uuids the import answers \"already exists\" or "
+            "updates the original. A copy is often simpler with template_create, item_create and trigger_create."
         ),
         read_only=False,
         params=[

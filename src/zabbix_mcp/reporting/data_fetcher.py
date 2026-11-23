@@ -20,8 +20,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import TYPE_CHECKING, Any
+
+from zabbix_mcp.timezones import zone_name
 
 if TYPE_CHECKING:
     from zabbix_mcp.client import ClientManager
@@ -29,9 +31,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger("zabbix_mcp.reporting")
 
 
-def _ts_to_str(ts: int | float) -> str:
-    """Convert a Unix timestamp to a human-readable UTC string."""
-    return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+def _zone(tz: tzinfo | None) -> tzinfo:
+    """The zone a report renders in: *tz* when given, else UTC (pre-v1.41 behaviour)."""
+    return tz if tz is not None else timezone.utc
+
+
+def _ts_to_str(ts: int | float, tz: tzinfo | None = None) -> str:
+    """Convert a Unix timestamp to a human-readable string in *tz* (UTC by default).
+
+    The zone's name is appended, e.g. ``2026-10-01 00:00 Europe/Prague``.
+    """
+    zone = _zone(tz)
+    local = datetime.fromtimestamp(int(ts), tz=zone)
+    return local.strftime("%Y-%m-%d %H:%M ") + zone_name(zone)
 
 
 def _get_hosts(
@@ -67,12 +79,16 @@ def fetch_availability_data(
     client_manager: ClientManager,
     server_name: str,
     params: dict,
+    *,
+    tz: tzinfo | None = None,
 ) -> dict:
     """Fetch availability data for the report.
 
     Parameters in *params*:
         hostgroupid or hostids, period_from (epoch), period_to (epoch),
         service_hours (str), operational_hours (str)
+
+    *tz* is the zone the period labels are rendered in (UTC when omitted).
 
     Returns a dict suitable as Jinja2 context for ``availability.html``.
     """
@@ -157,8 +173,9 @@ def fetch_availability_data(
         "hosts": host_results,
         "total_events": total_events,
         "availability_pct": overall_pct,
-        "period_from": _ts_to_str(period_from),
-        "period_to": _ts_to_str(period_to),
+        "period_from": _ts_to_str(period_from, tz),
+        "period_to": _ts_to_str(period_to, tz),
+        "timezone": zone_name(_zone(tz)),
         "service_hours": params.get("service_hours", "24x7"),
         "operational_hours": params.get("operational_hours", "24x7"),
     }
@@ -171,7 +188,17 @@ def fetch_availability_data(
 # Common item keys for capacity metrics
 _CPU_KEYS = ["system.cpu.util", "system.cpu.util[,idle]"]
 _MEMORY_KEYS = ["vm.memory.utilization", "vm.memory.size[pused]"]
-_DISK_KEYS = ["vfs.fs.size[/,pused]", "vfs.fs.size[C:,pused]"]
+# Linux/Windows by Zabbix agent templates (6.0+) collect filesystem usage
+# as dependent items of vfs.fs.get, keyed vfs.fs.dependent.size[...]; the
+# plain vfs.fs.size[...] key is what older templates and hand-made items
+# use. item.get "search" is a substring match, so neither spelling finds
+# the other - look for both, newest first (#84).
+_DISK_KEYS = [
+    "vfs.fs.dependent.size[/,pused]",
+    "vfs.fs.dependent.size[C:,pused]",
+    "vfs.fs.size[/,pused]",
+    "vfs.fs.size[C:,pused]",
+]
 
 _METRIC_DEFS = [
     ("CPU Usage", _CPU_KEYS),
@@ -216,11 +243,15 @@ def fetch_capacity_host_data(
     client_manager: ClientManager,
     server_name: str,
     params: dict,
+    *,
+    tz: tzinfo | None = None,
 ) -> dict:
     """Fetch CPU/memory/disk capacity data per host.
 
     Parameters in *params*:
         hostgroupid or hostids, period_from (epoch), period_to (epoch)
+
+    *tz* is the zone the period labels are rendered in (UTC when omitted).
 
     Returns a dict suitable as Jinja2 context for ``capacity_host.html``.
     """
@@ -296,8 +327,9 @@ def fetch_capacity_host_data(
     return {
         "hosts": hosts,
         "metrics": metrics,
-        "period_from": _ts_to_str(period_from),
-        "period_to": _ts_to_str(period_to),
+        "period_from": _ts_to_str(period_from, tz),
+        "period_to": _ts_to_str(period_to, tz),
+        "timezone": zone_name(_zone(tz)),
     }
 
 
@@ -310,11 +342,15 @@ def fetch_capacity_network_data(
     client_manager: ClientManager,
     server_name: str,
     params: dict,
+    *,
+    tz: tzinfo | None = None,
 ) -> dict:
     """Fetch network bandwidth/traffic data per interface.
 
     Parameters in *params*:
         hostgroupid or hostids, period_from (epoch), period_to (epoch)
+
+    *tz* is the zone the period labels are rendered in (UTC when omitted).
 
     Returns a dict suitable as Jinja2 context for ``capacity_network.html``.
     """
@@ -417,8 +453,9 @@ def fetch_capacity_network_data(
     return {
         "hosts": host_results,
         "cpu_rows": cpu_rows,
-        "period_from": _ts_to_str(period_from),
-        "period_to": _ts_to_str(period_to),
+        "period_from": _ts_to_str(period_from, tz),
+        "period_to": _ts_to_str(period_to, tz),
+        "timezone": zone_name(_zone(tz)),
     }
 
 
@@ -431,6 +468,8 @@ def fetch_backup_data(
     client_manager: ClientManager,
     server_name: str,
     params: dict,
+    *,
+    tz: tzinfo | None = None,
 ) -> dict:
     """Fetch backup status per host per day.
 
@@ -440,6 +479,9 @@ def fetch_backup_data(
         backup_item_key (str, optional — defaults to searching for common
         backup item keys)
 
+    *tz* is the zone days are cut in and period labels are rendered in
+    (UTC when omitted).
+
     Returns a dict suitable as Jinja2 context for ``backup.html``.
     """
     hosts = _get_hosts(client_manager, server_name, params)
@@ -448,9 +490,12 @@ def fetch_backup_data(
     period_label = params.get("period_label", "")
     backup_key = params.get("backup_item_key", "")
 
-    # Determine the day numbers in the report period
-    from_dt = datetime.fromtimestamp(period_from, tz=timezone.utc)
-    to_dt = datetime.fromtimestamp(period_to, tz=timezone.utc)
+    # Determine the day numbers in the report period. Days are cut at
+    # local midnight in the report zone, so a backup that ran at 23:30
+    # in Prague lands on that day and not on the next UTC day.
+    zone = _zone(tz)
+    from_dt = datetime.fromtimestamp(period_from, tz=zone)
+    to_dt = datetime.fromtimestamp(period_to, tz=zone)
 
     # Build list of days (1-based day numbers)
     days: list[int] = []
@@ -523,7 +568,7 @@ def fetch_backup_data(
             # Group by day and determine success/failure
             for record in history:
                 ts = int(record["clock"])
-                dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                dt = datetime.fromtimestamp(ts, tz=zone)
                 day_num = dt.day
 
                 value = record.get("value", "")
@@ -573,7 +618,7 @@ def fetch_backup_data(
                 problem_days: set[int] = set()
                 for event in events:
                     ts = int(event["clock"])
-                    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    dt = datetime.fromtimestamp(ts, tz=zone)
                     if event.get("value") == "1":  # PROBLEM
                         problem_days.add(dt.day)
 
@@ -586,4 +631,7 @@ def fetch_backup_data(
         "backup_matrix": backup_matrix,
         "days": days,
         "period_label": period_label,
+        "period_from": _ts_to_str(period_from, tz),
+        "period_to": _ts_to_str(period_to, tz),
+        "timezone": zone_name(zone),
     }
