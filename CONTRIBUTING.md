@@ -14,8 +14,10 @@ pip install -e .
 
 ## Running Tests
 
+The suite is plain `unittest` (no pytest in the repository or the venv); new tests go into a `unittest.TestCase` so `discover` picks them up.
+
 ```bash
-python -m pytest tests/test_smoke.py -v
+python -m unittest discover -s tests -p "test_*.py"
 ```
 
 ## Project Structure
@@ -25,7 +27,7 @@ src/zabbix_mcp/
 ├── cli.py              # CLI entry point
 ├── config.py           # TOML config loading
 ├── client.py           # Multi-server Zabbix client + rate limiter
-├── server.py           # FastMCP server + dynamic tool registration
+├── server.py           # MCPServer (SDK 2.x) server + dynamic tool registration
 └── api/
     ├── types.py        # MethodDef, ParamDef dataclasses
     ├── common.py       # Shared parameter sets
